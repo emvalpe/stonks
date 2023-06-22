@@ -1,0 +1,6 @@
+ - analyze each of the companies on the list with other financial indicators(some of which require SEC based info as well as comparisons to other companies)
+ - develop a means to output all of this infomation[]
+ - create a comparison graph of gold, btc/eth, the nasdaq, USD(can this be done),and your personal portfolio(first 5 are controls, gather daily closing values(4pm est))[]
+
+ - fix x axis issues 
+ - get nasdaq and usd valuation(as of now kind of annoying af)
