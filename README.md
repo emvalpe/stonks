@@ -9,3 +9,8 @@ TODO:
 FIX:
  - fix x axis issues 
  - get nasdaq and usd valuation(as of now kind of annoying af)
+
+Data:
+ - treasury interest rate api for DCF
+ - 10Q-net cash flow, profit, growth of profit DCF
+ - bvps and dps
