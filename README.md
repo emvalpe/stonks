@@ -12,5 +12,5 @@ FIX:
 
 Data:
  - treasury interest rate api for DCF
- - 10Q-net cash flow, profit, growth of profit DCF
+ - 10Q-net cash flow, profit, growth of profit DCF ex:(https://www.sec.gov/Archives/edgar/data/1018724/000101872423000012/amzn-20230630.htm)
  - bvps and dps
