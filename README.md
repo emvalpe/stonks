@@ -1,16 +1,21 @@
 # stonks
 A project designed to automate the downloading of data to determine if a stonk has "a good brand name" as well as determining if a stock is under or over valued.
 
-TODO:
- - statistics to determine if stock are valued high or low(DCF[https://www.investopedia.com/terms/d/dcf.asp] and these other ones[https://www.investopedia.com/articles/investing/101316/how-tell-if-stock-overvalued-or-undervalued.asp])
-    - if the statistic is best compared to others in it's industry the SEC offers a simple way to do that will explain later 
- - analyze each of the companies on the list with other financial indicators
+improvements: control_data.py
+ - fix x axis issues (control graph)
+ - get nasdaq and usd valuation(hard to get)
 
-FIX:
- - fix x axis issues 
- - get nasdaq and usd valuation(as of now kind of annoying af)
+todo: branding_info.py
+ - add market stats funcs to big loop for stocks(branding_info.py-company_info_loop)
 
-Data:
- - treasury interest rate api for DCF
- - 10Q-net cash flow, profit, growth of profit DCF ex:(https://www.sec.gov/Archives/edgar/data/1018724/000101872423000012/amzn-20230630.htm)
- - bvps and dps
+todo: market_stats.py(most recent function)
+ - check that you are reading 10q's right
+ - dump entire 10q's to a file
+
+general todo:
+ - make ai price prediction model DL NN with evolutionary design
+ - make ai purchasing model DL NN
+ - market volatility data
+ - oil data?
+ - sentiment analysis?: google trends data and "microblogging" scraping
+ - write functions to calculate indicators
