@@ -1,6 +1,3 @@
-#10Q for net neutral, and profit(tbd)
-#bvps found in 10Q (total stockholders' equity - prefered equity)/common stock outstanding(tbd)
-
 import json
 import requests
 
