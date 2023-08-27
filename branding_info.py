@@ -1,7 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys 
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.action_chains import ActionChains#new to try and imitate user input
+from selenium.webdriver.common.action_chains import ActionChains
 
 import random as r
 import time as t
@@ -118,25 +118,25 @@ def company_pricing_info(company, total):
 		test.write(str(companies)+"\n")
 		return total
 
+def company_info_loop():
+	best = open("errors.txt", "w+")
+	best.write(" ")
+	best.close()
 
-best = open("errors.txt", "w+")
-best.write(" ")
-best.close()
+	try:
+		os.mkdir("./stocks")
+	except FileExistsError:
+		pass
 
-try:
-	os.mkdir("./stocks")
-except FileExistsError:
-	pass
+	total = 0
+	replace_acronyms = {"GE":"General Electric", "BMW":"Bayerische Motoren Werke", "IBM":"International Business Machines", "H&M":"Hennes & Mauritz Group", "HP":" Hewlett-Packard", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Kentucky Fried Chicken", "UPS":"United States Postal Service"}
 
-total = 0
-replace_acronyms = {"GE":"General Electric", "BMW":"Bayerische Motoren Werke", "IBM":"International Business Machines", "H&M":"Hennes & Mauritz Group", "HP":" Hewlett-Packard", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Kentucky Fried Chicken", "UPS":"United States Postal Service"}
+	for i in json.load(open("branding_output.txt", "r"))["companies"]:
+		if i["Company"] not in replace_acronyms.keys():
+			company = i["Company"]
+			if company.find(" ") == -1:
+				company = company+" "
+		else:
+			company = replace_acronyms.get(i["Company"])
 
-for i in json.load(open("branding_output.txt", "r"))["companies"]:
-	if i["Company"] not in replace_acronyms.keys():
-		company = i["Company"]
-		if company.find(" ") == -1:
-			company = company+" "
-	else:
-		company = replace_acronyms.get(i["Company"])
-
-	total = company_pricing_info(company, total)
+		total = company_pricing_info(company, total)
