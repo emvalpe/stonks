@@ -8,14 +8,6 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-'''
-Maybe add usd valuation to this, seems hard rn, possibly https://github.com/rwieruch/purchasing-power-parity
-
-Gold, London A.M. Fixing 	LBMA 	LBMA/GOLD (1968-2023)#only one to check for regular updates
-Gold, World Gold Council 	WGC 	WGC/GOLD_DAILY_USD(1970-2020)
-Gold, Bundesbank 	BUNDESBANK 	BUNDESBANK/BBK01_WT5511(1968-2016)
-Gold, COMEX Gold Futures 	COMEX 	CHRIS/CME_GC1(1974-2021)
-'''
 
 def convert_time(date):
 	tim = 0
@@ -176,7 +168,7 @@ def btc_valuation(execution_type):#binance api
 		f.writelines(balls)
 		f.close()#earliest date 2021-03-01
 
-def eth_validation(execution_type):
+def eth_valuation(execution_type):
 
 	try:
 		os.mkdir("./crypto")
@@ -220,37 +212,6 @@ def eth_validation(execution_type):
 def generate_graph():
 	files = ["gold_average.txt", "./crypto/btc.txt", "./crypto/eth.txt"]
 	cfiles = ["cgold_average.txt", "./crypto/cbtc.txt", "./crypto/ceth.txt"]
-	'''
-	lines = []
-	
-	combo = open("combo_data.txt", "w+")
-	val_type = ""
-	for i in files:
-		lins = (i.readline()).split(":")
-		if lins != [""]:
-			lines.append(lins)
-
-	while True:
-		if lines == []:break
-		lowest = determine_lowest(lines)
-		
-		if lowest == 0:
-			val_type = "gold"
-		elif lowest == 1:
-			val_type = "btc"
-		else:
-			val_type = "eth"
-		try:
-			combo.write(val_type+":"+lines[lowest][0]+":"+lines[lowest][1])
-		except Exception:
-			print(str(lines)+"::::::"+str(lowest))
-		lin = (files[lowest].readline()).split(":")
-		if lin != [""]:
-			lines[lowest] = lin
-		else:
-			del lines[lowest]
-
-	combo.close()'''
 
 	for i in files:
 		f = open(i, "r")
@@ -323,10 +284,8 @@ def generate_graph():
 	#plt.grid(axis="x")
 	plt.show()
 
-def update():
+def update():#for daily usage
 	gold_valuation("update")
 	btc_valuation("update")
 	eth_valuation("update")
 	generate_graph()
-
-generate_graph()#update()
