@@ -1,7 +1,19 @@
 import json
 import requests
+import math
+
+import time
+import datetime
 
 import personal_lib as personal
+
+def convert_time(date):
+	tim = 0
+	date = date.replace("-", "")
+	date = date+"000000"
+	tim = str((datetime.datetime.strptime(date, "%Y%m%d%H%M%S") - datetime.datetime.utcfromtimestamp(0)).total_seconds())
+
+	return tim
 
 def file_request(url, to=5):
 	file_str = ''
@@ -69,5 +81,45 @@ def treasury_interest_rate():#returns entire db
 	#print(request)
 
 
+def volatility(prices):
+	days = len(prices)
+	s_period = math.sqrt(days)
 
-sec_filling_information(, "10-Q")#test
+	total = 0
+	for i in prices:
+		total+=i
+
+	average=total/days
+	std = 0
+	for i in prices:
+		std+=((i-average)**2) 
+
+	std = std/days
+
+	return s_period*std
+
+def crude_oil(execution_type):
+	starting_url = "http://data.nasdaq.com/api/v3/datasets/"
+	data_sources = ['CHRIS/CME_CL1', 'CHRIS/ICE_B1', 'DOE/I19263000008', 'DOE/I070000004', 'ODA/POILDUB_USD']
+
+	try:
+		os.mkdir("./crude_oil")
+	except FileExistsError:
+		pass
+
+	for i in data_sources:
+		
+		data = json.loads(requests.get(starting_url+i).text)
+		if execution_type == "update":
+			wdir = open("./crude_oil/"+i+".txt", "a+")
+			day = data["dataset"]["data"][0]
+			wdir.write(convert_time(day[0])+":"+day[1]+"\n")
+			wdir.close()
+			del wdir
+
+		else:
+			wdir = open("./crude_oil/"+i+".txt", "w+")
+			for j in data:
+				wdir.write(convert_time(j[0])+":"+j[1]+"\n")
+
+#sec_filling_information(, "10-Q")#test
