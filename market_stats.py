@@ -128,4 +128,3 @@ def crude_oil(execution_type):
 			wdir.close()
 
 #sec_filling_information(, "10-Q")#test
-crude_oil("")
