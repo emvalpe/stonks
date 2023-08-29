@@ -15,7 +15,5 @@ todo: market_stats.py(most recent function)
 general todo:
  - make ai price prediction model DL NN with evolutionary design
  - make ai purchasing model DL NN
- - market volatility data
- - oil data?
  - sentiment analysis?: google trends data and "microblogging" scraping
  - write functions to calculate indicators
