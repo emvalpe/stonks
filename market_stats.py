@@ -123,8 +123,9 @@ def crude_oil(execution_type):
 			wdir = open("./crude_oil/"+i.split("/")[1]+".txt", "w+")
 			print("Source: "+i)
 			for j in data["dataset"]["data"]:
-				wdir.write(j[0]+":"+str(j[1])+ str(day[7]) +"\n")
+				wdir.write(j[0]+":"+str(j[1])+ str(j[7]) +"\n")
 			
 			wdir.close()
 
 #sec_filling_information(, "10-Q")#test
+crude_oil("")
