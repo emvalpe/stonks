@@ -11,6 +11,9 @@ todo: branding_info.py
 todo: market_stats.py(most recent function)
  - check that you are reading 10q's right
  - dump entire 10q's to a file
+ - Total Stockholder Equity: Simply locate the column in the Doc
+ - Net Income: Simply locate the row in doc
+ - Total profit: Estimate by locating net income and total expenses
 
 general todo:
  - make ai price prediction model DL NN with evolutionary design
