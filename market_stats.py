@@ -1,6 +1,7 @@
 import json
 import requests
 import math
+import os
 
 import time
 import datetime
@@ -100,7 +101,7 @@ def volatility(prices):
 
 def crude_oil(execution_type):
 	starting_url = "http://data.nasdaq.com/api/v3/datasets/"
-	data_sources = ['CHRIS/CME_CL1', 'CHRIS/ICE_B1', 'DOE/I19263000008', 'DOE/I070000004', 'ODA/POILDUB_USD']
+	data_sources = ['CHRIS/CME_CL1', 'CHRIS/ICE_B1']
 
 	try:
 		os.mkdir("./crude_oil")
@@ -111,15 +112,19 @@ def crude_oil(execution_type):
 		
 		data = json.loads(requests.get(starting_url+i).text)
 		if execution_type == "update":
-			wdir = open("./crude_oil/"+i+".txt", "a+")
+			wdir = open("./crude_oil/"+i.split("/")[1]+".txt", "a+")
 			day = data["dataset"]["data"][0]
-			wdir.write(convert_time(day[0])+":"+day[1]+"\n")
+
+			wdir.write(day[0]+":"+str(day[1])+ str(day[7]) +"\n")
 			wdir.close()
 			del wdir
 
 		else:
-			wdir = open("./crude_oil/"+i+".txt", "w+")
-			for j in data:
-				wdir.write(convert_time(j[0])+":"+j[1]+"\n")
+			wdir = open("./crude_oil/"+i.split("/")[1]+".txt", "w+")
+			print("Source: "+i)
+			for j in data["dataset"]["data"]:
+				wdir.write(j[0]+":"+str(j[1])+ str(day[7]) +"\n")
+			
+			wdir.close()
 
 #sec_filling_information(, "10-Q")#test
