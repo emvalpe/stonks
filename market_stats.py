@@ -1,12 +1,15 @@
 import json
 import requests
+from bs4 import BeautifulSoup
+
 import math
 import os
 
-import time
+import time as t
 import datetime
 
 import personal_lib as personal
+import pandas
 
 def convert_time(date):
 	tim = 0
@@ -16,12 +19,15 @@ def convert_time(date):
 
 	return tim
 
-def file_request(url, to=5):
+def file_request(url, to=5, html=False):
 	file_str = ''
 	headers = personal.random_user_agent("SEC")
 
 	try:
-		file_str = requests.get(url, headers=headers, timeout=to).text
+		if html == False:
+			file_str = requests.get(url, headers=headers, timeout=to).text
+		else:
+			file_str = requests.get(url, headers=headers, timeout=to)
 	except requests.ConnectionError:
 		t.sleep(1)
 		file_request(url)
@@ -34,6 +40,26 @@ def file_request(url, to=5):
 		file_request(url, to=30)
 
 	return file_str
+
+def search_table(lines):
+	lines = BeautifulSoup(lines.text, features="lxml")
+	print("writing tables")
+		
+	for i in lines.find_all("table"):
+		table = []
+		for tr in i.find_all("tr"):
+			if tr.get_text(strip=True) != "" or tr.get_text(strip=True) != " " or tr.get_text(strip=True) != "\n" or len(tr.get_text(strip=True)) > 4:
+				table.append(tr.get_text(strip=True))
+		
+		desired_data = ["net income", "gross profit", "Total stockholders’ equity"]
+		for j in table:
+			for dp in desired_data:
+				if j.find(dp) != -1:
+					print(j)
+		
+
+
+
 
 def sic_comparison(company):
 	#company should be dict
@@ -50,27 +76,19 @@ def sic_comparison(company):
 		if line["sic"] == target and len(line["exchanges"]) != 0:
 			competitors.append(line)
 
-	return competitors
+	return competitorso
 
 def sec_filling_information(company, target):
-	desired_data = ["net income", "gross profit", "Total stockholders’ equity"]
-	iterat=0
-	for i in company["filings"]["recent"]["accessionNumber"]:
-		if company["filings"]["recent"]["form"][iterat] == target:
+
+	for i in range(len(company["filings"]["recent"]["accessionNumber"])):
+		if company["filings"]["recent"]["form"][i] == target:
 			filing_url = "https://www.sec.gov/Archives/edgar/data/"+company["cik"]+"/"
-			fil = i.replace("-", "")
-			filing_url += fil + "/" + i + ".txt"
-			request = file_request(filing_url).split("\n")
-			hits = 0
-			for line in request:
-				if hits == 2:break
-				for dp in desired_data:
-					if line.lower().find(dp) != -1:
-						print(line)#test if found right dps also scale of values?
-						hits+=1
+			fil = company["filings"]["recent"]["accessionNumber"][i].replace("-", "")
+			filing_url += fil + "/" + company["filings"]["recent"]["accessionNumber"][i] + ".txt"
+			request = file_request(filing_url, html=True)
+			search_table(request)#search table should add data to sec dict, once tested
 
-		iterat+=1
-
+	return company
 
 def treasury_interest_rate():#returns entire db
 	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"#hardcoded 500 total dps
@@ -127,4 +145,12 @@ def crude_oil(execution_type):
 			
 			wdir.close()
 
-#sec_filling_information(, "10-Q")#test
+def trends_data(company_str, execution_type=""):
+	#https://trends.google.com/trends/explore?q=bi&date=now%201-d&geo=US&hl=en
+	if execution_type == "update":
+		url = "https://trends.google.com/trends/explore?q=" + company_str + "&date=now%201-d&geo=US&hl=en"
+	else:
+		url = "https://trends.google.com/trends/explore?q=" + company_str + "&date=now%all-d&geo=US&hl=en"
+
+	interest_over_time = file_request(url)
+	return interest_over_time
