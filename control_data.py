@@ -289,3 +289,9 @@ def update():#for daily usage
 	btc_valuation("update")
 	eth_valuation("update")
 	generate_graph()
+
+#generate_graph()#update()
+
+#gold_valuation("")
+#eth_valuation("")
+#btc_valuation("")
