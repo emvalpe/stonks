@@ -9,6 +9,10 @@ import json
 import requests
 import os
 
+import market_stats as mstat
+import pandas
+import pytrends
+
 def search_for_company(name):#returns list of possible candidates
 	sec_data = open("processed.json", "r")
 	possible_candidates = []
@@ -100,28 +104,26 @@ def top_brands():
 	f.close()
 
 def company_pricing_info(company, total):
-	test = open("errors.txt", "a+")
 	companies = search_for_company(company)
-	if len(companies) == 1:
+	total=len(companies)
+	if total == 1:
 		f = open("./stocks/"+companies[0]["tickers"][0]+".csv", "w+")
 		url = "https://query1.finance.yahoo.com/v7/finance/download/"+companies[0]["tickers"][0]+"?period1=0000000001&period2="+str(int(t.time()))+"&interval=1d&events=history&includeAdjustedClose=true"
-		req = requests.get(url, headers=random_user_agent("dict"))
+		try:
+			req = requests.get(url, headers=random_user_agent("dict"))
+		except requests.exceptions.ConnectionError:
+			t.sleep(1000)
+			req = requests.get(url, headers=random_user_agent("dict"))
 		f.writelines(req.text)
 		f.close()
-		return total
-	elif len(companies) == 0:
-		print("Company may be foreign: " + company)
-		print(total+1)
-		return total+1
+		return companies[0], total
+	elif total == 0:
+		#print("Company may be foreign: " + company)
+		return companies, total
 	else:
-		test.write("Len of list: "+str(len(companies))+" For: "+company)
-		test.write(str(companies)+"\n")
-		return total
+		return companies, total
 
 def company_info_loop():
-	best = open("errors.txt", "w+")
-	best.write(" ")
-	best.close()
 
 	try:
 		os.mkdir("./stocks")
@@ -129,7 +131,8 @@ def company_info_loop():
 		pass
 
 	total = 0
-	replace_acronyms = {"GE":"General Electric", "BMW":"Bayerische Motoren Werke", "IBM":"International Business Machines", "H&M":"Hennes & Mauritz Group", "HP":" Hewlett-Packard", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Kentucky Fried Chicken", "UPS":"United States Postal Service"}
+	#hardcoded ik: nke, tsla, and arbnb aint workin
+	replace_acronyms = {"Coca-Cola":"Coca-Cola Consolidated, Inc.","Salesforce":"Customer relationship management", "J.P. Morgan":"JPMorgan Chase & Co","McDonald’s":"McDonalds Corp","GE":"General Electric CO", "IBM":"International Business Machines", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Yum Brands", "UPS":"United Parcel Service", "Pepsi":"PepsiCo", "Google":"Alphabet Inc.", "YouTube":"Alphabet Inc.", "Facebook":"Meta Platforms", "Instagram":"Meta Platforms", "Budweiser":"Anheuser-Busch Companies", "Pampers":"Procter & Gamble", "Nestle":"Nestlé S.A.", "Kellogg's":"Kellogg Company", "LinkedIn":"Microsoft", "Jack Daniel's":"Brown–Forman Corporation", "Tiffany":"Tiffany & Co", "Land Rover":"Jaguar Land Rover", "Louis Vuitton":"LVMH", "Goldman Sachs":"GOLDMAN SACHS GROUP INC", "Santander":"Banco Santander Mexico S.A."}
 
 	for i in json.load(open("branding_output.txt", "r"))["companies"]:
 		if i["Company"] not in replace_acronyms.keys():
@@ -139,4 +142,25 @@ def company_info_loop():
 		else:
 			company = replace_acronyms.get(i["Company"])
 
-		total = company_pricing_info(company, total)
+		sec_company, total = company_pricing_info(company, total)
+		
+		if total == 1:
+			pass			
+		elif total == 0:#foreign companies
+			continue
+		else:
+			tickers = {"Apple Inc.":"AAPL", "HP INC":"HPQ", "GENERAL ELECTRIC CO":"GE", "FORD MOTOR CO":"F", "PROCTER & GAMBLE Co":"PG", "EBAY INC":"EBAY","MORGAN STANLEY":"MS"}
+			for comp in sec_company:#weird issue where companies with the / dont quite work
+				if comp["name"] in tickers.keys():
+					sec_company = comp
+					sec_company["name"] = sec_company["name"].replace("/", "")
+					break
+
+
+		#where the magic will happen
+		print("Digging into " + sec_company["name"])
+		#sentiment_data = mstat.trends_data(sec_company["name"])
+		sec_company = mstat.sec_filling_information(sec_company, "10-Q")#will return a bigger dict, need to understand how to iter through tables
+
+			
+company_info_loop()
