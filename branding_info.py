@@ -107,7 +107,6 @@ def company_pricing_info(company, total):
 	companies = search_for_company(company)
 	total=len(companies)
 	if total == 1:
-		f = open("./stocks/"+companies[0]["tickers"][0]+".csv", "w+")
 		url = "https://query1.finance.yahoo.com/v7/finance/download/"+companies[0]["tickers"][0]+"?period1=0000000001&period2="+str(int(t.time()))+"&interval=1d&events=history&includeAdjustedClose=true"
 		try:
 			req = requests.get(url, headers=random_user_agent("dict"))
