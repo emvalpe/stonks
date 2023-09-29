@@ -114,9 +114,8 @@ def company_pricing_info(company, total):
 		except requests.exceptions.ConnectionError:
 			t.sleep(1000)
 			req = requests.get(url, headers=random_user_agent("dict"))
-		f.writelines(req.text)
-		f.close()
-		return companies[0], total
+
+		return companies[0], (req.text).split("\n")
 	elif total == 0:
 		#print("Company may be foreign: " + company)
 		return companies, total
@@ -144,8 +143,8 @@ def company_info_loop():
 
 		sec_company, total = company_pricing_info(company, total)
 		
-		if total == 1:
-			pass			
+		if type(total) == list:#improve
+			sec_company["stock_price"] = total
 		elif total == 0:#foreign companies
 			continue
 		else:
@@ -153,14 +152,18 @@ def company_info_loop():
 			for comp in sec_company:#weird issue where companies with the / dont quite work
 				if comp["name"] in tickers.keys():
 					sec_company = comp
-					sec_company["name"] = sec_company["name"].replace("/", "")
 					break
 
+		sec_company["name"] = sec_company["name"].replace("/", "")
 
+		start = t.time()
 		#where the magic will happen
 		print("Digging into " + sec_company["name"])
 		#sentiment_data = mstat.trends_data(sec_company["name"])
 		sec_company = mstat.sec_filling_information(sec_company, "10-Q")#will return a bigger dict, need to understand how to iter through tables
+		f = open("./stocks/"+sec_company["tickers"][0]+".json", "w+")
+		json.dump(sec_company, f, indent=1)
+		f.close()
+		print("Dug into " + sec_company["name"] + " took(min) " + str((t.time()-start)/60))
 
-			
 company_info_loop()
