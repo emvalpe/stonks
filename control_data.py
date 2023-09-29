@@ -208,6 +208,33 @@ def eth_valuation(execution_type):
 		f.writelines(balls)
 		f.close()
 
+def crude_oil(execution_type):
+	starting_url = "http://data.nasdaq.com/api/v3/datasets/"
+	data_sources = ['CHRIS/CME_CL1', 'CHRIS/ICE_B1']
+
+	try:
+		os.mkdir("./crude_oil")
+	except FileExistsError:
+		pass
+
+	for i in data_sources:
+		
+		data = json.loads(requests.get(starting_url+i).text)
+		if execution_type == "update":
+			wdir = open("./crude_oil/"+i.split("/")[1]+".txt", "a+")
+			day = data["dataset"]["data"][0]
+
+			wdir.write(day[0]+":"+str(day[1])+ str(day[7]) +"\n")
+			wdir.close()
+			del wdir
+
+		else:
+			wdir = open("./crude_oil/"+i.split("/")[1]+".txt", "w+")
+			print("Source: "+i)
+			for j in data["dataset"]["data"]:
+				wdir.write(j[0]+":"+str(j[1])+ str(j[7]) +"\n")
+			
+			wdir.close()
 
 def generate_graph():
 	files = ["gold_average.txt", "./crypto/btc.txt", "./crypto/eth.txt"]
