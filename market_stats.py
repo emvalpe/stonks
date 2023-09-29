@@ -9,7 +9,7 @@ import time as t
 import datetime
 
 import personal_lib as personal
-import pandas
+import pandas as pd
 
 def convert_time(date):
 	tim = 0
@@ -41,25 +41,42 @@ def file_request(url, to=5, html=False):
 
 	return file_str
 
-def search_table(lines):
+def search_table(lines):#consider looking for scale statements (in mill for example)
 	lines = BeautifulSoup(lines.text, features="lxml")
-	print("writing tables")
 		
 	for i in lines.find_all("table"):
-		table = []
-		for tr in i.find_all("tr"):
-			if tr.get_text(strip=True) != "" or tr.get_text(strip=True) != " " or tr.get_text(strip=True) != "\n" or len(tr.get_text(strip=True)) > 4:
-				table.append(tr.get_text(strip=True))
+		try:
+			i = pd.read_html(str(i))
+		except ValueError as e:
+			#print(e)#No tables found matching pattern '.+'
+			continue
 		
-		desired_data = ["net income", "gross profit", "Total stockholders’ equity"]
-		for j in table:
-			for dp in desired_data:
-				if j.find(dp) != -1:
-					print(j)
-		
+		outp = {}#for if the entire table is empty(funky html people)
+		for row in i:#net income, and gross income/profit/margin, shareholders’
+			desired_data = ["net income", "gross margin", "total shareholders’ equity"]
+			row = row.dropna().to_dict()
+			found_dp = {}
+			outp = {}
+			try:
+				for key, value in row[list(row.keys())[0]].items():
+					for dp in desired_data:
+						if str(value).lower().find(dp) != -1:
+							found_dp[key] = value.lower()
+
+				for column in found_dp.keys():
+					for i in row.keys():
+						rows = row[i]
+						if rows[column] != "$" and str(rows[column]).lower() != found_dp[column]:
+							try:
+								if column not in outp and column in desired_data:
+									outp[column] = str(rows[column])
+							except KeyError as e:#keeping these errors for testing whole dataset
+								print(e)
+			except KeyError:
+				print(str(row))
 
 
-
+	return outp
 
 def sic_comparison(company):
 	#company should be dict
@@ -76,17 +93,19 @@ def sic_comparison(company):
 		if line["sic"] == target and len(line["exchanges"]) != 0:
 			competitors.append(line)
 
-	return competitorso
+	return competitors
 
-def sec_filling_information(company, target):
-
+def sec_filling_information(company, target):#add code to examine competitors too
+	company.update({"statistical data":[]})
 	for i in range(len(company["filings"]["recent"]["accessionNumber"])):
 		if company["filings"]["recent"]["form"][i] == target:
 			filing_url = "https://www.sec.gov/Archives/edgar/data/"+company["cik"]+"/"
 			fil = company["filings"]["recent"]["accessionNumber"][i].replace("-", "")
 			filing_url += fil + "/" + company["filings"]["recent"]["accessionNumber"][i] + ".txt"
 			request = file_request(filing_url, html=True)
-			search_table(request)#search table should add data to sec dict, once tested
+			extra_stats = search_table(request)
+			extra_stats["filingDate"] = company["filings"]["recent"]["filingDate"][i]
+			company['statistical data'].append(extra_stats)
 
 	return company
 
