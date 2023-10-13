@@ -8,6 +8,7 @@ improvements: control_data.py
 
 improvements: market_stats.py
  - implement sic comparison to get competitor companies and derive meaning from their current state(average indicators?)
+ - fix issue with weird table processing issue, fully remove unicode???
 
 general todo:
  - make ai price prediction model DL NN with evolutionary design
