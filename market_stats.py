@@ -42,45 +42,59 @@ def file_request(url, to=5, html=False):
 	return file_str
 
 def search_table(lines):#consider looking for scale statements (in mill for example)
-	lines = BeautifulSoup(lines.text, features="lxml")
+	try:
+		lines = BeautifulSoup((lines.text).encode('ascii', errors='ignore').strip().decode('ascii'), features="lxml")
+	except Exception as t:
+		print(str(t)+" : "+lines)
 		
+	outp = {}#for if the entire table is empty(funky html people)
 	for i in lines.find_all("table"):
 		try:
 			i = pd.read_html(str(i))
 		except ValueError as e:
-			#print(e)#No tables found matching pattern '.+'
 			continue
-		
-		outp = {}#for if the entire table is empty(funky html people)
-		for row in i:#net income, and gross income/profit/margin, shareholders’
-			desired_data = ["net income", "gross margin", "total shareholders’ equity"]
+		except Exception as f:#looks like this will be an IndexError??
+			print(str(f)+" : "+str(i))
+
+		matched = []
+		for row in i:#net income, and gross income/profit/margin, shareholders(would have a ' but curved, removed because F unicode) equity
+			desired_data = ["net income", "gross margin", "total shareholders equity"]
 			row = row.dropna().to_dict()
 			found_dp = {}
-			outp = {}
 			try:
+				broken = False
 				for key, value in row[list(row.keys())[0]].items():
 					for dp in desired_data:
-						if str(value).lower().find(dp) != -1:
+						if str(value).lower() == dp and dp not in matched:
 							found_dp[key] = value.lower()
+							matched.append(dp)
+							if len(matched) == len(desired_data):
+								broken = True
+								break
+					
+					if broken == True:
+						break
+
 
 				for column in found_dp.keys():
-					for i in row.keys():
-						rows = row[i]
+					for k in row.keys():
+						rows = row[k]
 						if rows[column] != "$" and str(rows[column]).lower() != found_dp[column]:
 							try:
-								if column not in outp and column in desired_data:
-									outp[column] = str(rows[column])
+								if column not in outp:
+									outp[found_dp[column]] = str(rows[column]).replace("$ ", "")
 							except KeyError as e:#keeping these errors for testing whole dataset
 								print(e)
 			except KeyError:
 				print(str(row))
-
-
-	return outp
+	if outp == {}:
+		outp["no data"] = lines.text
+		return outp
+	else:
+		return outp
 
 def sic_comparison(company):
-	#company should be dict
-	target = company["sic"]
+	#company should be sic
 	competitors = []
 	sec_db = open("processed.json", "r")
 
@@ -90,23 +104,39 @@ def sic_comparison(company):
 		if line.replace("\n", "") == "": continue
 
 		line = json.loads(line)
-		if line["sic"] == target and len(line["exchanges"]) != 0:
+		if line["sic"] == company and len(line["exchanges"]) != 0:
 			competitors.append(line)
 
 	return competitors
 
 def sec_filling_information(company, target):#add code to examine competitors too
-	company.update({"statistical data":[]})
+	company.update({"statisticalData":[]})
+	ite = 0
+	bad_ite = 0
+
 	for i in range(len(company["filings"]["recent"]["accessionNumber"])):
-		if company["filings"]["recent"]["form"][i] == target:
+		if str(company["filings"]["recent"]["form"][i]).upper() == target or company["filings"]["recent"]["form"][i].upper().find(target) != -1:
+			ite += 1
 			filing_url = "https://www.sec.gov/Archives/edgar/data/"+company["cik"]+"/"
 			fil = company["filings"]["recent"]["accessionNumber"][i].replace("-", "")
 			filing_url += fil + "/" + company["filings"]["recent"]["accessionNumber"][i] + ".txt"
-			request = file_request(filing_url, html=True)
-			extra_stats = search_table(request)
-			extra_stats["filingDate"] = company["filings"]["recent"]["filingDate"][i]
-			company['statistical data'].append(extra_stats)
+			request = file_request(filing_url, html=True)#check if bounced request or something
+			while request.status_code < 300 and request.status_code >= 200:
+				t.sleep(30)
+				request = file_request(filing_url, html=True)
 
+			extra_stats = search_table(request)
+			if "no data" not in extra_stats.keys():
+				extra_stats["data"] = filing_url
+				extra_stats["filingDate"] = company["filings"]["recent"]["filingDate"][i]
+				company['statisticalData'].append(extra_stats)
+			else:
+				bad_ite += 1
+				extra_stats["no data"] = filing_url
+				extra_stats["filingDate"] = company["filings"]["recent"]["filingDate"][i]
+				company['statisticalData'].append(extra_stats)
+
+	print(str(ite)+" filings searched:"+str(bad_ite)+" filings with data extracted")
 	return company
 
 def treasury_interest_rate():#returns entire db
