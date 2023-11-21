@@ -7,11 +7,9 @@ improvements: control_data.py
  - implement crude oil, and create update for it
 
 improvements: market_stats.py
- - implement sic comparison to get competitor companies and derive meaning from their current state(average indicators?)
  - fix issue with weird table processing issue, fully remove unicode???
 
 general todo:
  - make ai price prediction model DL NN with evolutionary design
  - make ai purchasing model DL NN
- - sentiment analysis?[google trends done]: google trends data and "microblogging" scraping
- - write functions to calculate indicators
+ - test google trends data
