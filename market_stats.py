@@ -41,57 +41,265 @@ def file_request(url, to=5, html=False):
 
 	return file_str
 
-def search_table(lines):#consider looking for scale statements (in mill for example)
-	try:
-		lines = BeautifulSoup((lines.text).encode('ascii', errors='ignore').strip().decode('ascii'), features="lxml")
-	except Exception as t:
-		print(str(t)+" : "+lines)
+def rep_month(string):
+	months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
+	string = string.replace(u'\xa0', ' ').replace(",", "").replace("/", " ").replace("\\", " ")
+	spit = string.split(" ")
+	outp = ""
+
+	for sub in spit:
+		mon = 0
+		for i in months:
+			bing = ""
+			mon+=1
+
+			loc = sub.find(i)
+			los = sub.find(i[:3])
+			if mon < 10:
+				bing = "0"
+
+			if sub.endswith(i):
+				sub = sub.replace(i ,bing+str(mon))
+				break
+			elif sub.endswith(i[:3]):
+				sub = sub.replace(i[:3] ,bing+str(mon))
+				break
+
+			if loc != -1:
+				sub = sub.replace(i ,bing+str(mon))
+				break
+			elif loc == -1 and los != -1:
+				sub = sub.replace(i[:3] ,bing+str(mon))
+				break
+
+		outp+=sub+" "
+
+	return outp[:-1]
+
+def start_alp(text):
+	for i in range(len(text)):
+		if text[i].isalnum():
+			return text[i:]
+
+def just_alpha(text):
+	if type(text) == type(1):return text
+	new_str = ""
+	for i in range(len(text)):
+		if text[i].isalnum():
+			new_str += text[i]
+
+	return new_str
+
+def date_to_num(date):
+	if len(date) > 8:#year/month/day
+		date = date.replace(" ", "").replace(",", "").replace("/", "").replace("\\", "")
+	
+	new_date = date[4:]+date[:4]
+	return new_date
+
+#fix at some point
+def no_col_table(lines):
+	dict_ret = {}
+	for t in lines.find_all("table"):
+		table = str(t).split("\n")
+		top = True
+		top_lines = []
+		other_lines = []
+		for i in table:
+			if t == "":continue
+			if i.find("$") != -1:top = False
+			
+			if top and i.find("<") == -1:
+				top_lines.append(i.split("  "))
+			elif i.find("<") == -1:
+				other_lines.append(i)
+			else:
+				continue
+
+		col = []
+		for i in top_lines:
+			for s in i:
+				if len(s) < 3:continue
+
+				c = rep_month(s.replace(" ", ""))
+				if s != c and c not in dict_ret and len(c) == 8:
+					dict_ret[date_to_num(c)] = {}
+					col.append(date_to_num(c))
 		
-	outp = {}#for if the entire table is empty(funky html people)
-	for i in lines.find_all("table"):
+		if len(list(dict_ret.keys())) == 0:continue
+
+		for i in other_lines:
+			pin = 0
+			key = ""
+			for p in i.split("  "):
+				z = just_alpha(p)
+				if len(z) < 3:continue
+
+				if pin == 0 or key == "" and key.find(":") == -1:
+					key=p
+					pin+=1
+
+				else:
+					try:
+						dict_ret[col[pin-1]][key] = z
+					except Exception:
+						continue
+					pin+=1
+
+
+	return dict_ret
+
+def new_search_table(lines, is_html):
+	datz = {}
+	to_print = []
+	for table in lines.find_all("table"):
 		try:
-			i = pd.read_html(str(i))
-		except ValueError as e:
+			if is_html == True:
+				to_dict = pd.read_html(str(table).replace("$", ""))[0]
+			else:
+				to_dict = pd.read_xml(str(table).replace("$", ""))['td']#1 is a style thing
+		except ValueError:
 			continue
-		except Exception as f:#looks like this will be an IndexError??
-			print(str(f)+" : "+str(i))
-
-		matched = []
-		for row in i:#net income, and gross income/profit/margin, shareholders(would have a ' but curved, removed because F unicode) equity
-			desired_data = ["net income", "gross margin", "total shareholders equity"]
-			row = row.dropna().to_dict()
-			found_dp = {}
+		except Exception:
 			try:
-				broken = False
-				for key, value in row[list(row.keys())[0]].items():
-					for dp in desired_data:
-						if str(value).lower() == dp and dp not in matched:
-							found_dp[key] = value.lower()
-							matched.append(dp)
-							if len(matched) == len(desired_data):
-								broken = True
-								break
-					
-					if broken == True:
-						break
+				to_dict = pd.read_html(str(table).replace("$", ""))[0]
+			except IndexError:
+				continue
+			except ValueError:
+				continue
+		try:
+			tab = to_dict.dropna(axis=1, how='all').dropna(how="all")
+			tab = tab.to_dict()
+		except ValueError:
+			continue
 
 
-				for column in found_dp.keys():
-					for k in row.keys():
-						rows = row[k]
-						if rows[column] != "$" and str(rows[column]).lower() != found_dp[column]:
-							try:
-								if column not in outp:
-									outp[found_dp[column]] = str(rows[column]).replace("$ ", "")
-							except KeyError as e:#keeping these errors for testing whole dataset
-								print(e)
-			except KeyError:
-				print(str(row))
-	if outp == {}:
-		outp["no data"] = lines.text
-		return outp
-	else:
-		return outp
+		if is_html == True:
+			to_print.append(str(tab))
+
+
+		result = {}#remove dups, neccessary
+		for key,value in tab.items():
+			if value not in result.values():
+				result[key] = value
+			
+		tab = result
+
+		try:
+			header = list(tab[0].values())
+		except KeyError:
+			#print("issue")
+			continue
+			
+		for p in tab.keys():
+			if p == 0:continue
+
+			possible_dates = ""
+			for zz in tab[p]:
+				zz = str(tab[p][zz])
+				if not pd.isnull(zz):
+					if type(zz) == float:
+						zz = str(zz)
+
+					if not zz.isnumeric():
+						possible_dates += zz + "#"
+			dat = ""
+			for dates in possible_dates.split("#"):
+				bat = rep_month(dates)
+				if bat != dates and len(bat) <= 12 and bat.find("(")==-1:
+					dat = bat
+					break
+				
+			if dat == "":
+				continue
+
+			dat = date_to_num(dat)
+			if dat not in datz.keys():datz[dat] = {}
+
+			cont = 0
+			for tib in (tab[p]).values():
+				if str(header[cont]) == "nan":
+					cont+=1
+					continue
+				if header[cont] not in (datz[dat]).keys() and not pd.isnull(tib) and just_alpha(str(tib)) != "":
+					datz[dat][header[cont]] = just_alpha(str(tib))
+				else:
+					if not pd.isnull(tib) and just_alpha(str(tib)) != "":
+						datz[dat][header[cont]] = just_alpha(str(tib))
+
+				cont+=1
+	
+
+	return datz
+
+def old_search_table(lines):
+	desired = {}
+	tab = []
+	if str(lines).find("<s>") == -1:
+		return desired
+
+	for t in lines.find_all("table"):
+		table = str(t)
+		#print(table)
+		dates = (table[table.find("<caption>")+len("<caption>"):table.find("<s>")]).split("\n")
+		if dates == 0:continue#when not found
+		good_dates = []
+		#print(dates)
+		for i in dates:
+			if i == "":continue
+
+			if len(i.split(",")) == 2:good_dates.append(rep_month(i))
+			elif just_alpha(i) == "threemonthsended":continue
+			elif rep_month(i) != i:good_dates.append(just_alpha(rep_month(i)))
+			elif len(just_alpha(i))%4 == 0:good_dates.append(just_alpha(i))
+			
+		try:
+			good_dates.remove("")
+		except ValueError:#catch if not present
+			pass
+
+		if len(good_dates) == 2:
+			for g in good_dates:good_dates[good_dates.index(g)] = rep_month(g)
+			
+			old = date_to_num(good_dates[0][4:]+good_dates[1][4:])
+			new = date_to_num(good_dates[0][:4]+good_dates[1][:4])
+			
+			if not old.isnumeric() or not new.isnumeric():
+				continue
+
+
+			if old not in desired.keys():desired[old] = {}
+			if new not in desired.keys():desired[new] = {}
+			to_analyze = table[table.find("<c>")+8:]
+			for p in to_analyze.split("\n"):
+				p = p.replace("$", "").replace(",","")
+				if just_alpha(p) != "":
+					bits = p.split(" ")
+					newp = []
+					for bit in bits:
+						if bit!="":newp.append(bit)
+					if len(newp) >= 3 and newp[-1].isnumeric() and newp[-2].isnumeric():
+						cat = ""
+						for b in newp[:-2]:
+							cat+=b+" "
+						cat = cat[:-1]
+						desired[old][cat] = newp[-1]
+						desired[new][cat] = newp[-2]
+		
+	return desired	
+
+
+def find_scaling_per_doc(lines):
+	for p in lines.find_all("p"):
+		tp = str(p.text)
+		if tp.find("(in") != -1 and len(tp[tp.find("(in"):tp.find("\n")-1]) < 50 and len(tp[tp.find("(in"):tp.find("\n")-1]) > 5:
+			stri = tp[tp.find("(in")+3:tp.find("\n")-2].replace("\n", "")
+			if stri.find("million") != -1:return "million"
+			if stri.find("thousand") != -1:return "thousand"
+			if stri.find("billion") != -1:return "billion"
+				
+	return ""
+	
 
 def sic_comparison(company):
 	#company should be sic
@@ -109,45 +317,111 @@ def sic_comparison(company):
 
 	return competitors
 
-def sec_filling_information(company, target):#add code to examine competitors too
+def sec_filling_information(company, target):
 	company.update({"statisticalData":[]})
+	desired_data = ["net income", "gross margin", "total shareholders' equity"]
 	ite = 0
 	bad_ite = 0
 
+	total = 0
+	start = t.time()
+	for f in company["filings"]["recent"]["form"]:
+		if f.upper() == target:total+=1
+	#SEC 600/min
 	for i in range(len(company["filings"]["recent"]["accessionNumber"])):
 		if str(company["filings"]["recent"]["form"][i]).upper() == target or company["filings"]["recent"]["form"][i].upper().find(target) != -1:
 			ite += 1
 			filing_url = "https://www.sec.gov/Archives/edgar/data/"+company["cik"]+"/"
 			fil = company["filings"]["recent"]["accessionNumber"][i].replace("-", "")
 			filing_url += fil + "/" + company["filings"]["recent"]["accessionNumber"][i] + ".txt"
-			request = file_request(filing_url, html=True)#check if bounced request or something
-			while request.status_code < 300 and request.status_code >= 200:
-				t.sleep(30)
-				request = file_request(filing_url, html=True)
+			
+			while True:
+				try:
+					request = file_request(filing_url, html=True)#check if bounced request or something
+					if request.status_code >= 300 and request.status_code < 200:
+						t.sleep(1)
+						print("Repeat html request")
+					else:
+						break
+				except Exception:
+					t.sleep(1)
+					pass
 
-			extra_stats = search_table(request)
-			if "no data" not in extra_stats.keys():
-				extra_stats["data"] = filing_url
-				extra_stats["filingDate"] = company["filings"]["recent"]["filingDate"][i]
-				company['statisticalData'].append(extra_stats)
-			else:
-				bad_ite += 1
-				extra_stats["no data"] = filing_url
-				extra_stats["filingDate"] = company["filings"]["recent"]["filingDate"][i]
-				company['statisticalData'].append(extra_stats)
+			extra_stats = {}
+			result = (request.text).replace("\u2019", "'").lower().replace("\t", " ")
+			doc_body = ""
 
-	print(str(ite)+" filings searched:"+str(bad_ite)+" filings with data extracted")
+			if result.find("<type>") != -1:
+				typ = result[result.find("<type>")+6:]
+				newl = typ.find("\n")
+				typ = typ[:newl]
+				if typ == "10-q" or typ.find("10-q") != -1:
+					hunt = True
+
+			if result.find("<text>") != -1:
+				doc_body=(result[result.find("<text>"):result.find("</text>")])
+
+			doc = doc_body
+			is_html = True
+
+			if doc[:20].find("<xbrl>") != -1:#modern
+				bs = BeautifulSoup(doc[doc.find("<?xml"):doc.find("</xml>")], "xml")
+				is_html = False
+				extra_stats = new_search_table(bs, is_html)
+				extra_stats["method"] = 3
+			elif doc[:21].find("html") != -1:#second oldest
+				bs = BeautifulSoup(doc[doc.find("<html"):doc.find("</html>")].replace("..", " "), "html.parser")
+				extra_stats = new_search_table(bs, is_html)
+				extra_stats["method"] = 2
+			else:#oldest
+				bs = BeautifulSoup(doc, "html.parser")
+				extra_stats = old_search_table(bs)
+
+				if len(extra_stats.keys()) == 0:
+					extra_stats = no_col_table(bs)
+
+				extra_stats["method"] = 1		
+
+			for k in list(extra_stats.keys()):
+				if k.isnumeric() and k != "method" and int(just_alpha(k)) < 19700000:
+					del extra_stats[k]
+					continue
+
+				if ((not k.isnumeric() or len(k) != 8) and k != "method") or extra_stats[k] == "":
+					del extra_stats[k]
+
+			if len(extra_stats.keys()) == 1:
+				print(filing_url)
+				bad_ite+=1
+
+			extra_stats["scale"] = find_scaling_per_doc(bs)
+			extra_stats["url"] = filing_url
+			extra_stats["filingDate"] = company["filings"]["recent"]["filingDate"][i]
+			company['statisticalData'].append(extra_stats)
+
+			if ite%10 == 0:
+				print("Percent complete: " + str(round(((ite-1)/total)*100, 2)) + "%\nTime since start of company analysis(min): " + str(round((t.time()-start)/60, 2)))
+
+	last = ""
+	for z in company['statisticalData'][::-1]:
+		if z["scale"] != "":
+			last = z["scale"]
+		else:
+			z["scale"] = last
+
+	company["fails"] = bad_ite
+	print(str(ite)+" filings searched: "+str(bad_ite))
 	return company
+
 
 def treasury_interest_rate():#returns entire db
 	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"#hardcoded 500 total dps
-	request = json.loads(file_request(url))
+	request = (file_request(url, html=True)).json()
 	del request["meta"]
 	f = open("fed_interest_rate.json", "w+")
 	for i in request["data"]:
 		f.write(json.dumps(i)+"\n")
 	#print(request)
-
 
 def volatility(prices):
 	days = len(prices)
