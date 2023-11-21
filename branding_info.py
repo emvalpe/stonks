@@ -195,7 +195,11 @@ def company_info_loop():
 		for c in comp:
 			c = company_pricing_info(c)
 			c = mstat.sec_filling_information(c, "10-Q")
-			avg_comp["companies"].append(c)
+			if float(c["fails"])/float(len(c["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
+				print("FAILED[] finding statistical data for: "+str(c["tickers"][0]).lower())
+				continue
+			else:
+				avg_comp["companies"].append(c)
 
 		json.dump(avg_comp, competitor)
 		competitor.close()
