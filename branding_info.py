@@ -24,7 +24,7 @@ def search_for_company(name):#returns list of possible candidates
 		
 		line = json.loads(line)
 
-		if line["name"].lower().find(name.lower()) != -1:
+		if line["name"].lower().replace("\u2019", "'").find(name.lower()) != -1:
 			possible_candidates.append(line)
 		elif name in line["formerNames"]:
 			possible_candidates.append(line)
@@ -82,7 +82,7 @@ def top_brands():
 					data["Ranking"] = element.text
 					sub_iter+=1
 				else:
-					data["Company"] = element.text
+					data["Company"] = (element.text).replace("\u2019", "'")
 			
 			sub_iter = 0
 			output["companies"].append(data)
@@ -116,19 +116,27 @@ def company_info_loop():
 		pass
 
 	total = 0
-	#hardcoded ik: nke, tsla, and arbnb aint workin
-	replace_acronyms = {"Coca-Cola":"Coca-Cola Consolidated, Inc.","Salesforce":"Customer relationship management", "J.P. Morgan":"JPMorgan Chase & Co","McDonald’s":"McDonalds Corp","GE":"General Electric CO", "IBM":"International Business Machines", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Yum Brands", "UPS":"United Parcel Service", "Pepsi":"PepsiCo", "Google":"Alphabet Inc.", "YouTube":"Alphabet Inc.", "Facebook":"Meta Platforms", "Instagram":"Meta Platforms", "Budweiser":"Anheuser-Busch Companies", "Pampers":"Procter & Gamble", "Nestle":"Nestlé S.A.", "Kellogg's":"Kellogg Company", "LinkedIn":"Microsoft", "Jack Daniel's":"Brown–Forman Corporation", "Tiffany":"Tiffany & Co", "Land Rover":"Jaguar Land Rover", "Louis Vuitton":"LVMH", "Goldman Sachs":"GOLDMAN SACHS GROUP INC", "Santander":"Banco Santander Mexico S.A."}
+	replace_acronyms = {"Sony":"Sony Group Corp", "Jack Daniel's":"BROWN FORMAN CORP", "Coca-Cola":"Coca-Cola Consolidated, Inc.", "J.P. Morgan":"JPMorgan Chase & Co","McDonalds":"McDonalds Corp","GE":"General Electric CO", "IBM":"International Business Machines", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Yum Brands", "UPS":"United Parcel Service", "Pepsi":"PepsiCo", "Google":"Alphabet Inc.", "YouTube":"Alphabet Inc.", "Facebook":"Meta Platforms", "Instagram":"Meta Platforms", "Budweiser":"Anheuser-Busch Companies", "Pampers":"Procter & Gamble", "Nestle":"Nestlé S.A.", "Kellogg's":"WK Kellogg Co", "LinkedIn":"Microsoft", "Jack Daniel's":"Brown–Forman Corporation", "Tiffany":"Tiffany & Co", "Land Rover":"Jaguar Land Rover", "Louis Vuitton":"LVMH", "Goldman Sachs":"GOLDMAN SACHS GROUP INC", "Santander":"Banco Santander Mexico S.A."}
 	competitors = []
-	for i in json.load(open("branding_output.txt", "r"))["companies"]:
-		if i["Company"] not in replace_acronyms.keys():
-			company = i["Company"]
-		else:
-			company = replace_acronyms.get(i["Company"])
+	anti_duplicate_list = []
 
+	for i in json.load(open("branding_output.txt", "r"))["companies"]:
+		if i["Company"].replace("\u00e9", "e") == "mini":continue
+		if i["Company"].replace("\u00e9", "e") not in replace_acronyms.keys():
+			company = i["Company"].replace("\u00e9", "e")
+		else:
+			company = replace_acronyms.get(i["Company"].replace("\u00e9", "e"))
+
+		if company in anti_duplicate_list:
+			continue
+		else:
+			anti_duplicate_list.append(company)#avoid alphebet and meta duplicates
+
+		print("Starting analysis of brand: " + company)
 		companies = search_for_company(company)
 
 		if len(companies) > 1:
-			tickers = {"Apple Inc.":"AAPL", "HP INC":"HPQ", "GENERAL ELECTRIC CO":"GE", "FORD MOTOR CO":"F", "PROCTER & GAMBLE Co":"PG", "EBAY INC":"EBAY","MORGAN STANLEY":"MS"}
+			tickers = {"Salesforce, Inc.":"CRM","Apple Inc.":"AAPL", "HP INC":"HPQ", "GENERAL ELECTRIC CO":"GE", "FORD MOTOR CO":"F", "PROCTER & GAMBLE Co":"PG", "EBAY INC":"EBAY","MORGAN STANLEY":"MS"}
 			match = False
 			for comp in companies:
 				if comp["name"] in tickers.keys():
@@ -137,7 +145,7 @@ def company_info_loop():
 					break
 
 			if match == False:
-				company = companies[0]#idk default for now
+				company = companies[0]#idk default for now [fix]
 
 		elif companies == []:
 			print("Company may be foreign: " + company)
@@ -156,36 +164,41 @@ def company_info_loop():
 			print("Multiple results for: " + company)
 
 		start = t.time()
-		print("Digging into " + sec_company["name"])#companies that failed: aapl,bsmx(foreign only has 6k filings),ebay,f,ge,hpq,ms,pg
-		#sentiment_data = mstat.trends_data(sec_company["name"])#needs testing too
+		print("Digging into " + sec_company["name"])
+		sentiment_data = mstat.trends_data(sec_company["name"])#needs testing too
 		sec_company = mstat.sec_filling_information(sec_company, "10-Q")
-		if sec_company["statisticalData"] == []:
-			print("error finding statistical data")
-
-		f = open("./stocks/"+sec_company["tickers"][0]+".json", "w+")
+		if float(sec_company["fails"])/float(len(sec_company["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
+			print("FAILED[] finding statistical data for: "+str(sec_company["tickers"][0]).lower())
+			continue
+		#fill empty categories with previous values and remove extra dates
+		f = open("./stocks/"+(sec_company["tickers"][0]).lower()+".json", "w+")
 		json.dump(sec_company, f, indent=4)
 		f.close()
-		print("Dug into " + sec_company["name"] + " took(min) " + str((t.time()-start)/60))
+		print("Dug into " + sec_company["name"] + " took(min) " + str(round((t.time()-start)/60, 2)))
 		if sec_company["sic"] not in competitors:#used to process competitors AFTER this
 			competitors.append(sec_company["sic"])
 		
-		'''#untested code
-		print("Analyzing competitors")
-		for i in competitors:
-			comp = mstat.sic_comparison(i)
-			total_comp = len(comp)
-			avg_comp = {}
-			avg_comp["sic"] = i
-			avg_comp["companies"] = []
-			competitor = open(i+".json", "w+")
-			#take average of competitors data
-			for c in comp:
-				c = company_pricing_info(c)
-				c = mstat.sec_filling_information(c, "10-Q")
-				avg_comp["companies"].append(c)
+		#runs once per iteration to update(pretty quick I assume)
+	mstat.treasury_interest_rate()
 
-			json.dump(avg_comp, competitor)
-			competitor.close()
-		'''
+	#untested code[test]
+	print("Analyzing competitors")
+	for i in competitors:
+		print("Analyzing sic: "+str(i))
+		comp = mstat.sic_comparison(i)
+		total_comp = len(comp)
+		avg_comp = {}
+		avg_comp["sic"] = i
+		avg_comp["companies"] = []
+		competitor = open(i+".json", "w+")
+		#take average of competitors data
+		for c in comp:
+			c = company_pricing_info(c)
+			c = mstat.sec_filling_information(c, "10-Q")
+			avg_comp["companies"].append(c)
+
+		json.dump(avg_comp, competitor)
+		competitor.close()
+	
 
 company_info_loop()
