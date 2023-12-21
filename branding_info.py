@@ -168,8 +168,8 @@ def company_info_loop():
 		sentiment_data = mstat.trends_data(sec_company["name"])#needs testing too
 		sec_company = mstat.sec_filling_information(sec_company, "10-Q")
 		if float(sec_company["fails"])/float(len(sec_company["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
-			print("FAILED[] finding statistical data for: "+str(sec_company["tickers"][0]).lower())
-			continue
+			print("FAILED[] finding statistical data for: "+str(sec_company["name"]))
+			#continue
 		#fill empty categories with previous values and remove extra dates
 		f = open("./stocks/"+(sec_company["tickers"][0]).lower()+".json", "w+")
 		json.dump(sec_company, f, indent=4)
@@ -195,8 +195,8 @@ def company_info_loop():
 		for c in comp:
 			c = company_pricing_info(c)
 			c = mstat.sec_filling_information(c, "10-Q")
-			if float(c["fails"])/float(len(c["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
-				print("FAILED[] finding statistical data for: "+str(c["tickers"][0]).lower())
+			if len(c["statisticalData"]) == 0 or float(c["fails"])/float(len(c["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate, also seems to cause issues
+				print("FAILED[] finding ENOUGH statistical data for: "+str(c["name"]))
 				continue
 			else:
 				avg_comp["companies"].append(c)
