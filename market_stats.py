@@ -81,11 +81,13 @@ def start_alp(text):
 		if text[i].isalnum():
 			return text[i:]
 
-def just_alpha(text):
+def just_alpha(text, spaces=False):
 	if type(text) == type(1):return text
 	new_str = ""
 	for i in range(len(text)):
 		if text[i].isalnum():
+			new_str += text[i]
+		elif spaces and text[i] == " ":
 			new_str += text[i]
 
 	return new_str
@@ -151,7 +153,6 @@ def no_col_table(lines):
 
 def new_search_table(lines, is_html):
 	datz = {}
-	to_print = []
 	for table in lines.find_all("table"):
 		try:
 			if is_html == True:
@@ -173,11 +174,6 @@ def new_search_table(lines, is_html):
 		except ValueError:
 			continue
 
-
-		if is_html == True:
-			to_print.append(str(tab))
-
-
 		result = {}#remove dups, neccessary
 		for key,value in tab.items():
 			if value not in result.values():
@@ -185,12 +181,17 @@ def new_search_table(lines, is_html):
 			
 		tab = result
 
+		header = ""
+		for asdfasdf in tab.keys():
+			header = asdfasdf
+			break
+
 		try:
-			header = list(tab[0].values())
+			header = list(tab[header].values())
 		except KeyError:
-			#print("issue")
+			#empty ones have noheaders?
 			continue
-			
+
 		for p in tab.keys():
 			if p == 0:continue
 
@@ -291,13 +292,18 @@ def old_search_table(lines):
 
 def find_scaling_per_doc(lines):
 	for p in lines.find_all("p"):
-		tp = str(p.text)
+		tp = str(p.text).lower()
 		if tp.find("(in") != -1 and len(tp[tp.find("(in"):tp.find("\n")-1]) < 50 and len(tp[tp.find("(in"):tp.find("\n")-1]) > 5:
 			stri = tp[tp.find("(in")+3:tp.find("\n")-2].replace("\n", "")
 			if stri.find("million") != -1:return "million"
 			if stri.find("thousand") != -1:return "thousand"
 			if stri.find("billion") != -1:return "billion"
-				
+		elif tp.find("(dollars in ") != -1 and len(tp[tp.find("(dollars in "):tp.find("\n")-1]) < 50 and len(tp[tp.find("(in"):tp.find("\n")-1]) > 5:
+			stri = tp[tp.find("(dollars in ")+3:tp.find("\n")-2].replace("\n", "")
+			if stri.find("million") != -1:return "million"
+			if stri.find("thousand") != -1:return "thousand"
+			if stri.find("billion") != -1:return "billion"
+
 	return ""
 	
 
@@ -383,15 +389,38 @@ def sec_filling_information(company, target):
 				extra_stats["method"] = 1		
 
 			for k in list(extra_stats.keys()):
-				if k.isnumeric() and k != "method" and int(just_alpha(k)) < 19700000:
-					del extra_stats[k]
-					continue
+				if extra_stats[k] == {}:
+					del extra_stats[k] 
 
-				if ((not k.isnumeric() or len(k) != 8) and k != "method") or extra_stats[k] == "":
+				elif k.isnumeric() and k != "method" and int(just_alpha(k)) < 19700000:
 					del extra_stats[k]
+					
+				elif ((not k.isnumeric() or len(k) != 8) and k != "method") or extra_stats[k] == "":
+					del extra_stats[k]
+				else:
+					pass
+
+				if k != "method" and k in extra_stats.keys():
+					for kk in list((extra_stats[k]).keys()):
+						if type(kk) == type(9) or type(kk) == type(0.9):continue
+						if kk.find("  ") != -1:
+							key_mod = k.replace("  ", " ")
+							extra_stats[k][key_mod] = extra_stats[k][kk]
+							del extra_stats[k][kk]
+						elif len(just_alpha(kk, spaces=True)) != len(kk):
+							key_mod = ""
+							for char in kk:
+								if char.isalnum() or char == " " or char == "," or char == "-":
+									key_mod+=char
+								else:
+									break
+
+							extra_stats[k][key_mod] = extra_stats[k][kk]
+							del extra_stats[k][kk]
+				
 
 			if len(extra_stats.keys()) == 1:
-				print(filing_url)
+				#print(filing_url)#uncomment when debugging
 				bad_ite+=1
 
 			extra_stats["scale"] = find_scaling_per_doc(bs)
