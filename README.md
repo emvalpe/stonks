@@ -8,8 +8,14 @@ improvements: control_data.py
 
 improvements: market_stats.py
  - fix issue with weird table processing issue, fully remove unicode???
+ - Inflation
+ - Gross Domestic Product (GDP)
+ - Unemployment rate
+ - Consumer Price Index (CPI)
+ - Producer Price Index (PPI)
+ - Purchasing Managers' Index (PMI)
+ - Treasury yield curves
 
 general todo:
  - make ai price prediction model DL NN with evolutionary design
  - make ai purchasing model DL NN
- - test google trends data
