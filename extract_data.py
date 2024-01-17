@@ -42,7 +42,6 @@ for file in p:
 			except KeyError as e:
 				print(e)
 
-			company["acquired"] = []	
 			file_to_write.write(json.dumps(company)+"\n")
 		else:continue
 
