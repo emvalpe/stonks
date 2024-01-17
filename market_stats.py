@@ -10,6 +10,7 @@ import datetime
 
 import personal_lib as personal
 import pandas as pd
+from io import StringIO
 
 def convert_time(date):
 	tim = 0
@@ -99,6 +100,7 @@ def date_to_num(date):
 	new_date = date[4:]+date[:4]
 	return new_date
 
+
 #fix at some point
 def no_col_table(lines):
 	dict_ret = {}
@@ -156,14 +158,14 @@ def new_search_table(lines, is_html):
 	for table in lines.find_all("table"):
 		try:
 			if is_html == True:
-				to_dict = pd.read_html(str(table).replace("$", ""))[0]
+				to_dict = pd.read_html(StringIO(str(table).replace("$", "")))[0]
 			else:
-				to_dict = pd.read_xml(str(table).replace("$", ""))['td']#1 is a style thing
+				to_dict = pd.read_xml(StringIO(str(table).replace("$", "")))['td']#1 is a style thing
 		except ValueError:
 			continue
 		except Exception:
 			try:
-				to_dict = pd.read_html(str(table).replace("$", ""))[0]
+				to_dict = pd.read_html(StringIO(str(table).replace("$", "")))[0]
 			except IndexError:
 				continue
 			except ValueError:
@@ -288,7 +290,6 @@ def old_search_table(lines):
 						desired[new][cat] = newp[-2]
 		
 	return desired	
-
 
 def find_scaling_per_doc(lines):
 	for p in lines.find_all("p"):
@@ -425,7 +426,7 @@ def sec_filling_information(company, target):
 
 			extra_stats["scale"] = find_scaling_per_doc(bs)
 			extra_stats["url"] = filing_url
-			extra_stats["filingDate"] = company["filings"]["recent"]["filingDate"][i]
+			extra_stats["filingDate"] = just_alpha(company["filings"]["recent"]["filingDate"][i])
 			company['statisticalData'].append(extra_stats)
 
 			if ite%10 == 0:
@@ -456,14 +457,12 @@ def volatility(prices):
 	days = len(prices)
 	s_period = math.sqrt(days)
 
-	total = 0
-	for i in prices:
-		total+=i
-
+	total = len(prices)
+	
 	average=total/days
 	std = 0
 	for i in prices:
-		std+=((i-average)**2) 
+		std+=((float(i)-average)**2) 
 
 	std = std/days
 
