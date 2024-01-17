@@ -3,7 +3,7 @@ A project designed to automate the downloading of data to determine if a stonk h
 
 improvements: control_data.py
  - fix x axis issues (control graph)
- - get nasdaq and usd valuation(hard to get)
+ - get nasdaq and usd valuation
  - implement crude oil, and create update for it
 
 improvements: market_stats.py
