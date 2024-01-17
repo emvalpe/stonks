@@ -11,7 +11,6 @@ import os
 
 import market_stats as mstat
 import pandas
-import pytrends
 
 def search_for_company(name):#returns list of possible candidates
 	sec_data = open("processed.json", "r")
@@ -107,16 +106,37 @@ def company_pricing_info(company):
 	company["stock_price"] = (req.text).split("\n")
 	return company 
 
+def volatilities(company, vol):
+	vols = []
+
+	to_pass = []
+	for value in company["stock_price"][1:]:
+		to_pass.append(value.split(",")[1])
+
+		if len(to_pass) == vol:
+			try:
+				vols.append(mstat.volatility(to_pass))
+			except ValueError:
+				vols.append(vols[::-1])
+			
+			to_pass.pop(0)
+
+	return vols
 
 def company_info_loop():
-
+	mstat.treasury_interest_rate()#only needs to be called once
 	try:
 		os.mkdir("./stocks")
 	except FileExistsError:
 		pass
 
+	try:
+		os.mkdir("./competitors")
+	except Exception:
+		pass
+
 	total = 0
-	replace_acronyms = {"Sony":"Sony Group Corp", "Jack Daniel's":"BROWN FORMAN CORP", "Coca-Cola":"Coca-Cola Consolidated, Inc.", "J.P. Morgan":"JPMorgan Chase & Co","McDonalds":"McDonalds Corp","GE":"General Electric CO", "IBM":"International Business Machines", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Yum Brands", "UPS":"United Parcel Service", "Pepsi":"PepsiCo", "Google":"Alphabet Inc.", "YouTube":"Alphabet Inc.", "Facebook":"Meta Platforms", "Instagram":"Meta Platforms", "Budweiser":"Anheuser-Busch Companies", "Pampers":"Procter & Gamble", "Nestle":"Nestlé S.A.", "Kellogg's":"WK Kellogg Co", "LinkedIn":"Microsoft", "Jack Daniel's":"Brown–Forman Corporation", "Tiffany":"Tiffany & Co", "Land Rover":"Jaguar Land Rover", "Louis Vuitton":"LVMH", "Goldman Sachs":"GOLDMAN SACHS GROUP INC", "Santander":"Banco Santander Mexico S.A."}
+	replace_acronyms = {"Intel":"Intel Corp","Sony":"Sony Group Corp", "Jack Daniel's":"BROWN FORMAN CORP", "Coca-Cola":"Coca-Cola Consolidated, Inc.", "J.P. Morgan":"JPMorgan Chase & Co","McDonalds":"Yum Brands","GE":"General Electric CO", "IBM":"International Business Machines", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Yum Brands", "UPS":"United Parcel Service", "Pepsi":"PepsiCo", "Google":"Alphabet Inc.", "YouTube":"Alphabet Inc.", "Facebook":"Meta Platforms", "Instagram":"Meta Platforms", "Budweiser":"Anheuser-Busch Companies", "Pampers":"Procter & Gamble", "Nestle":"Nestlé S.A.", "Kellogg's":"WK Kellogg Co", "LinkedIn":"Microsoft", "Jack Daniel's":"Brown–Forman Corporation", "Tiffany":"Tiffany & Co", "Land Rover":"Jaguar Land Rover", "Louis Vuitton":"LVMH", "Goldman Sachs":"GOLDMAN SACHS GROUP INC", "Santander":"Banco Santander Mexico S.A.", "Mini":"British Motor Corporation", "Spotify":"Spotify Technology SA"}
 	competitors = []
 	anti_duplicate_list = []
 
@@ -165,24 +185,27 @@ def company_info_loop():
 
 		start = t.time()
 		print("Digging into " + sec_company["name"])
-		sentiment_data = mstat.trends_data(sec_company["name"])#needs testing too
 		sec_company = mstat.sec_filling_information(sec_company, "10-Q")
+		sec_company["trendsData"] = mstat.trends_data(sec_company["name"])#needs testing too
 		if float(sec_company["fails"])/float(len(sec_company["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
 			print("FAILED[] finding statistical data for: "+str(sec_company["name"]))
 			#continue
+		
+		sec_company["vol100"] = volatilities(sec_company, 100)
+		sec_company["vol365"] = volatilities(sec_company, 365)
+		sec_company["vol10"] = volatilities(sec_company, 10)
+		
 		#fill empty categories with previous values and remove extra dates
 		f = open("./stocks/"+(sec_company["tickers"][0]).lower()+".json", "w+")
 		json.dump(sec_company, f, indent=4)
 		f.close()
+		
+
 		print("Dug into " + sec_company["name"] + " took(min) " + str(round((t.time()-start)/60, 2)))
 		if sec_company["sic"] not in competitors:#used to process competitors AFTER this
-			competitors.append(sec_company["sic"])
-		
-		#runs once per iteration to update(pretty quick I assume)
-	mstat.treasury_interest_rate()
+			competitors.append(sec_company["sic"])	
 
-	#untested code[test]
-	print("Analyzing competitors")
+	print("Analyzing competitors")#test [not passed]
 	for i in competitors:
 		print("Analyzing sic: "+str(i))
 		comp = mstat.sic_comparison(i)
@@ -190,19 +213,37 @@ def company_info_loop():
 		avg_comp = {}
 		avg_comp["sic"] = i
 		avg_comp["companies"] = []
-		competitor = open(i+".json", "w+")
+		competitor = open("./competitors/"+i+".json", "w+")
 		#take average of competitors data
 		for c in comp:
+			if len(list(avg_comp["companies"])) >= 10:#had to set to 10 instead of twenty, it wtoree 140 gigs for some reason
+				break#this appears to be the issue
+
 			c = company_pricing_info(c)
 			c = mstat.sec_filling_information(c, "10-Q")
-			if len(c["statisticalData"]) == 0 or float(c["fails"])/float(len(c["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate, also seems to cause issues
-				print("FAILED[] finding ENOUGH statistical data for: "+str(c["name"]))
-				continue
-			else:
-				avg_comp["companies"].append(c)
+			if c["entityType"] != "operating" or len(list(c["statisticalData"])) <= 10 or len(list(c["tickers"])) == 0:continue
 
-		json.dump(avg_comp, competitor)
-		competitor.close()
-	
+			c["trendsData"] = mstat.trends_data(c["name"])#needs testing too
+			c["vol100"] = volatilities(c, 100)
+			c["vol365"] = volatilities(c, 365)
+			c["vol10"] = volatilities(c, 10)
+
+			try:
+
+				if float(c["fails"])/float(len(c["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate, also seems to cause issues
+					print("FAILED[] finding ENOUGH statistical data for: "+str(c["name"]))
+					continue
+				else:
+					avg_comp["companies"].append(c)
+
+			except Exception as e:
+				print(str(e))
+				print(c)
+				print("unfixed error")
+				
+
+		print("WRITING FOR SIC len of list: "+str(avg_comp["companies"]))
+		json.dump(avg_comp, competitor, indent=4)
+		competitor.close()				
 
 company_info_loop()
