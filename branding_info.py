@@ -137,7 +137,7 @@ def company_info_loop():
 
 	total = 0
 	replace_acronyms = {"Intel":"Intel Corp","Sony":"Sony Group Corp", "Jack Daniel's":"BROWN FORMAN CORP", "Coca-Cola":"Coca-Cola Consolidated, Inc.", "J.P. Morgan":"JPMorgan Chase & Co","McDonalds":"Yum Brands","GE":"General Electric CO", "IBM":"International Business Machines", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Yum Brands", "UPS":"United Parcel Service", "Pepsi":"PepsiCo", "Google":"Alphabet Inc.", "YouTube":"Alphabet Inc.", "Facebook":"Meta Platforms", "Instagram":"Meta Platforms", "Budweiser":"Anheuser-Busch Companies", "Pampers":"Procter & Gamble", "Nestle":"Nestlé S.A.", "Kellogg's":"WK Kellogg Co", "LinkedIn":"Microsoft", "Jack Daniel's":"Brown–Forman Corporation", "Tiffany":"Tiffany & Co", "Land Rover":"Jaguar Land Rover", "Louis Vuitton":"LVMH", "Goldman Sachs":"GOLDMAN SACHS GROUP INC", "Santander":"Banco Santander Mexico S.A.", "Mini":"British Motor Corporation", "Spotify":"Spotify Technology SA"}
-	competitors = []
+	competitors = {}
 	anti_duplicate_list = []
 
 	for i in json.load(open("branding_output.txt", "r"))["companies"]:
@@ -189,7 +189,7 @@ def company_info_loop():
 		sec_company["trendsData"] = mstat.trends_data(sec_company["name"])#needs testing too
 		if float(sec_company["fails"])/float(len(sec_company["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
 			print("FAILED[] finding statistical data for: "+str(sec_company["name"]))
-			#continue
+			continue#skip dumping remaining info
 		
 		sec_company["vol100"] = volatilities(sec_company, 100)
 		sec_company["vol365"] = volatilities(sec_company, 365)
@@ -202,48 +202,44 @@ def company_info_loop():
 		
 
 		print("Dug into " + sec_company["name"] + " took(min) " + str(round((t.time()-start)/60, 2)))
-		if sec_company["sic"] not in competitors:#used to process competitors AFTER this
-			competitors.append(sec_company["sic"])	
+		if sec_company["sic"] not in competitors.keys():#used to process competitors AFTER this
+			competitors[sec_company["sic"]] = sec_company["cik"]
 
 	print("Analyzing competitors")#test [not passed]
-	for i in competitors:
+	for i in competitors.keys():
 		print("Analyzing sic: "+str(i))
 		comp = mstat.sic_comparison(i)
-		total_comp = len(comp)
+
 		avg_comp = {}
 		avg_comp["sic"] = i
 		avg_comp["companies"] = []
+
 		competitor = open("./competitors/"+i+".json", "w+")
-		#take average of competitors data
 		for c in comp:
 			if len(list(avg_comp["companies"])) >= 10:#had to set to 10 instead of twenty, it wtoree 140 gigs for some reason
 				break#this appears to be the issue
 
-			c = company_pricing_info(c)
+			jc = json.loads(c)
+			if jc["cik"] == competitors[i] or jc["entityType"] != "operating" or len(list(jc["tickers"])) == 0:continue
+			
+
+			c = company_pricing_info(jc)
 			c = mstat.sec_filling_information(c, "10-Q")
-			if c["entityType"] != "operating" or len(list(c["statisticalData"])) <= 10 or len(list(c["tickers"])) == 0:continue
+			if len(list(c["statisticalData"])) <= 10:
+				continue
 
 			c["trendsData"] = mstat.trends_data(c["name"])#needs testing too
 			c["vol100"] = volatilities(c, 100)
 			c["vol365"] = volatilities(c, 365)
 			c["vol10"] = volatilities(c, 10)
 
-			try:
-
-				if float(c["fails"])/float(len(c["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate, also seems to cause issues
-					print("FAILED[] finding ENOUGH statistical data for: "+str(c["name"]))
-					continue
-				else:
-					avg_comp["companies"].append(c)
-
-			except Exception as e:
-				print(str(e))
-				print(c)
-				print("unfixed error")
+			if float(c["fails"])/float(len(c["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate, also seems to cause issues
+				print("FAILED[] finding ENOUGH statistical data for: "+str(c["name"]))
+				continue
+			else:
+				avg_comp["companies"].append(c)
 				
-
-		print("WRITING FOR SIC len of list: "+str(avg_comp["companies"]))
-		json.dump(avg_comp, competitor, indent=4)
+		competitor.write(json.dumps(avg_comp, indent=4))
 		competitor.close()				
 
 company_info_loop()
