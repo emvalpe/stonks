@@ -318,8 +318,8 @@ def sic_comparison(company):
 		if line == "": break
 		if line.replace("\n", "") == "": continue
 
-		line = json.loads(line)
-		if line["sic"] == company and len(line["exchanges"]) != 0:
+		jline =  json.loads(line)
+		if jline["sic"] == company and len(jline["exchanges"]) != 0:
 			competitors.append(line)
 
 	return competitors
