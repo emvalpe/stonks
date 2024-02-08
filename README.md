@@ -8,9 +8,9 @@ improvements: control_data.py
 
 improvements: market_stats.py
  - fix issue with weird table processing issue, fully remove unicode???
- 
  - fix competitor functions and add any new stats introduced after removed
- [below are not implemented fully/not started, grouped below are all on the same api]
+
+[below are not implemented fully/not started, grouped below are all on the same api]
  - Consumer Price Index (CPI)
  - Gross Domestic Product (GDP)
  - Unemployment rate
