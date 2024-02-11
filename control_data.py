@@ -9,13 +9,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-def convert_time(date):
-	tim = 0
-	date = date.replace("-", "")
-	date = date+"000000"
-	tim = str((datetime.datetime.strptime(date, "%Y%m%d%H%M%S") - datetime.datetime.utcfromtimestamp(0)).total_seconds())
-
-	return tim
+import market_stats as mstat
 
 def determine_lowest(bed):
 	index = len(bed)-1
@@ -31,7 +25,31 @@ def determine_lowest(bed):
 
 	return index
 
+#general macro indicators
+def treasury_interest_rate():#returns entire db
+	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"#hardcoded 500 total dps
+	request = (mstat.file_request(url, html=True)).json()
+	del request["meta"]
+	f = open("fed_interest_rate.json", "w+")
+	for i in request["data"]:
+		f.write(json.dumps(i)+"\n")
+	f.close()
+	#print(request)
 
+def treasury_yield_curves():#will need a loop since daily values
+	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/daily-treasury-rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"
+
+def inflation_rate():#https://www.bls.gov/help/hlpforma.htm
+	url = "https://api.bls.gov/publicAPI/v1/timeseries/data/"
+	request = (requests.post(url, data=(json.dumps({"seriesid":["I bookmarked the spot for this"],"startyear":"2011", "endyear":"2014"})), headers=mstat.random_user_agent())).json()
+
+	f = open("fed_inflation_rate.json", "w+")
+	for i in request["data"]:
+		f.write(json.dumps(i)+"\n")
+	#print(request)
+
+
+#commodities prices
 def gold_valuation(execution_type):#using the nasdaq api
 	starting_url = "http://data.nasdaq.com/api/v3/datasets/"
 	
@@ -41,92 +59,36 @@ def gold_valuation(execution_type):#using the nasdaq api
 		pass
 	
 	if execution_type == "update":
+		print("not programmed yet")
+		'''
 		f = open("gold_average.txt", "a+")
 		url = starting_url+"LBMA/GOLD"
 		to_process = json.loads(requests.get(url).text)
 		point = to_process["dataset"]["data"][0]
-		f.write(convert_time(point[0])+":"+str(point[1])+"\n")
-		f.close()
+		f.write(mstat.convert_time(point[0])+":"+str(point[1])+"\n")
+		f.close()'''
 
 	else:
-		values = []
 		data = []
 		list_of_price_values = ["CHRIS/CME_GC1", "BUNDESBANK/BBK01_WT5511", "LBMA/GOLD", "WGC/GOLD_DAILY_USD"]
 
 		for i in list_of_price_values:
 			f = open("./gold/gold_"+ i.replace("/", "") + ".txt", "w+")
 			try:
-				info = requests.get(starting_url+i).text
+				info = mstat.file_request(starting_url+i)
 				to_process = json.loads(info)
 			except Exception:
 				print("failed at: "+i)
 				continue
 
 			for val in to_process["dataset"]["data"]:
-				val[0] = convert_time(val[0])
-				data.append(val[0]+":"+str(val[1])+"\n")
+				data.append(mstat.convert_time(val[0])+":"+str(val[1])+"\n")
 			
 			data = reversed(data)
 			f.writelines(data)
 			data = []
 
 			f.close()
-		
-		#now to calculate an average, doesn't work
-		final = open("gold.txt", "w+")
-		files = []
-		lines = []
-		lowest = 0
-
-		for i in Path("./gold").iterdir():
-			files.append(i.open())
-
-		for i in files:
-			lines.append((i.readline()).split(":"))
-
-		while True:
-			if lines == []:break
-
-			lowest = determine_lowest(lines)
-			final.write(lines[lowest][0]+":"+lines[lowest][1])
-			lin = (files[lowest].readline()).split(":")
-			if lin != [""]:
-				lines[lowest] = lin
-			else:
-				del lines[lowest]
-
-		final.close()
-
-		og_data = open("gold.txt", "r")
-		average_data = open("gold_average.txt", "w+")
-
-		old = og_data.readline().split(":")
-		count = 1
-		total = float(old[1])
-
-		while True:
-			line = og_data.readline()
-			if line == "":break
-			line = (line).split(":")
-			if line[0] != old[0]:
-				if count == 0:
-					count = 1
-					try:
-						total = float(old[1])
-					except ValueError:
-						total = 0
-
-				average_data.write(old[0]+":"+str(total/count)+"\n")
-				count = 0
-				old = line
-				total = 0
-			else:
-				old = line
-				count+=1
-				try:
-					total+=float(line[1])
-				except ValueError:
-					pass
 
 def btc_valuation(execution_type):#binance api
 
