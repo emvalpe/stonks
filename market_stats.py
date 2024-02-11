@@ -8,7 +8,7 @@ import os
 import time as t
 import datetime
 
-import personal_lib as personal
+import random as r
 import pandas as pd
 from io import StringIO
 
@@ -20,9 +20,25 @@ def convert_time(date):
 
 	return tim
 
+def random_user_agent(typ="str"):#requests lib is very picky while selenium isn't 
+    agents = open("agents.txt", "r")
+    agent = r.choice(agents.readlines())
+    agents.close()
+    if typ == "dict":
+        balls = dict()
+        balls["User-Agent"] = str(agent).replace("\n", "")
+        return balls
+
+    elif typ == "SEC":
+        balls = dict()
+        balls["User-Agent"] = "Amazon_Inc_learning@gmail.com"
+        return balls
+    else:
+        return agent
+
 def file_request(url, to=5, html=False):
 	file_str = ''
-	headers = personal.random_user_agent("SEC")
+	headers = random_user_agent("SEC")
 
 	try:
 		if html == False:
@@ -342,20 +358,8 @@ def sec_filling_information(company, target):
 			fil = company["filings"]["recent"]["accessionNumber"][i].replace("-", "")
 			filing_url += fil + "/" + company["filings"]["recent"]["accessionNumber"][i] + ".txt"
 			
-			while True:
-				try:
-					request = file_request(filing_url, html=True)#check if bounced request or something
-					if request.status_code >= 300 and request.status_code < 200:
-						t.sleep(1)
-						print("Repeat html request")
-					else:
-						break
-				except Exception:
-					t.sleep(1)
-					pass
-
 			extra_stats = {}
-			result = (request.text).replace("\u2019", "'").lower().replace("\t", " ")
+			result = (file_request(filing_url)).replace("\u2019", "'").lower().replace("\t", " ")
 			doc_body = ""
 
 			if result.find("<type>") != -1:
@@ -429,7 +433,7 @@ def sec_filling_information(company, target):
 			extra_stats["filingDate"] = just_alpha(company["filings"]["recent"]["filingDate"][i])
 			company['statisticalData'].append(extra_stats)
 
-			if ite%10 == 0:
+			if ite%20 == 0:
 				print("Percent complete: " + str(round(((ite-1)/total)*100, 2)) + "%\nTime since start of company analysis(min): " + str(round((t.time()-start)/60, 2)))
 
 	last = ""
@@ -443,15 +447,6 @@ def sec_filling_information(company, target):
 	print(str(ite)+" filings searched: "+str(bad_ite))
 	return company
 
-
-def treasury_interest_rate():#returns entire db
-	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"#hardcoded 500 total dps
-	request = (file_request(url, html=True)).json()
-	del request["meta"]
-	f = open("fed_interest_rate.json", "w+")
-	for i in request["data"]:
-		f.write(json.dumps(i)+"\n")
-	#print(request)
 
 def volatility(prices):
 	days = len(prices)
@@ -476,4 +471,32 @@ def trends_data(company_str, execution_type=""):
 		url = "https://trends.google.com/trends/explore?q=" + company_str + "&date=now%all-d&geo=US&hl=en"
 
 	interest_over_time = file_request(url)
-	return interest_over_time
+	while (interest_over_time).find("Error 429") != -1:
+		t.sleep(10)
+		interest_over_time = file_request(url)
+
+	return interest_over_time.text
+
+def ama(prices):
+
+	average = 0
+	for p in prices:
+		average+=float(p)
+
+	return average/len(prices)
+
+def all_amas(data, length):
+	#do 10, 100, 365
+	to_pass = []
+	amas = {}
+	amas["time"] = []
+	amas["price"] = []
+	for i in data:
+		to_pass.append(i.split(",")[1])
+		if len(to_pass) > length:
+			to_pass.pop()
+		
+		amas["time"].append(i.split(",")[0]) 
+		amas["price"].append(ama(to_pass))
+
+	return amas
