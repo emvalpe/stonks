@@ -12,6 +12,8 @@ import random as r
 import pandas as pd
 from io import StringIO
 
+from pytrends.request import TrendReq
+
 def convert_time(date):
 	tim = 0
 	date = date.replace("-", "")
@@ -464,18 +466,10 @@ def volatility(prices):
 	return s_period*std
 
 def trends_data(company_str, execution_type=""):
-	#https://trends.google.com/trends/explore?q=bi&date=now%201-d&geo=US&hl=en
-	if execution_type == "update":
-		url = "https://trends.google.com/trends/explore?q=" + company_str + "&date=now%201-d&geo=US&hl=en"
-	else:
-		url = "https://trends.google.com/trends/explore?q=" + company_str + "&date=now%all-d&geo=US&hl=en"
+	py = TrendReq(hl="en-US", tz=360, retries=2)
+	payload = py.build_payload(kw_list=[company_str], cat=0, geo="US", timeframe="all", gprop="")
 
-	interest_over_time = file_request(url)
-	while (interest_over_time).find("Error 429") != -1:
-		t.sleep(10)
-		interest_over_time = file_request(url)
-
-	return interest_over_time.text
+	return py.interest_over_time().to_json()
 
 def ama(prices):
 
