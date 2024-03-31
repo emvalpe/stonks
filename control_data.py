@@ -25,30 +25,6 @@ def determine_lowest(bed):
 
 	return index
 
-#general macro indicators
-def treasury_interest_rate():#returns entire db
-	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"#hardcoded 500 total dps
-	request = (mstat.file_request(url, html=True)).json()
-	del request["meta"]
-	f = open("fed_interest_rate.json", "w+")
-	for i in request["data"]:
-		f.write(json.dumps(i)+"\n")
-	f.close()
-	#print(request)
-
-def treasury_yield_curves():#will need a loop since daily values
-	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/daily-treasury-rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"
-
-def inflation_rate():#https://www.bls.gov/help/hlpforma.htm
-	url = "https://api.bls.gov/publicAPI/v1/timeseries/data/"
-	request = (requests.post(url, data=(json.dumps({"seriesid":["I bookmarked the spot for this"],"startyear":"2011", "endyear":"2014"})), headers=mstat.random_user_agent())).json()
-
-	f = open("fed_inflation_rate.json", "w+")
-	for i in request["data"]:
-		f.write(json.dumps(i)+"\n")
-	#print(request)
-
-
 #commodities prices
 def gold_valuation(execution_type):#using the nasdaq api
 	starting_url = "http://data.nasdaq.com/api/v3/datasets/"
@@ -284,3 +260,136 @@ def update():#for daily usage
 #gold_valuation("")
 #eth_valuation("")
 #btc_valuation("")
+
+
+def treasury_interest_rate():#use for federalinterest
+	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"#hardcoded 500 total dps
+	request = (mstat.file_request(url, html=True)).json()
+	del request["meta"]
+	return request["data"]
+
+def yield_curve_dep_treasury():#remove commented code if data gathered correctly
+	url = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/"
+	add_1 = "?type=daily_treasury_yield_curve&field_tdr_date_value_month="
+	add_2 = "&page&_format=csv"
+	#the ints will be one variable decrementing by month
+	data = []
+	date = datetime.datetime.now()
+	
+	month = date.month
+	year = date.year
+
+	while year != 1900:
+		y2 = year
+		if int(month)-1 == 0:
+			m2 = month-1
+
+			if len(str(m2)) == 1:
+				m2 = "0"+str(m2)
+
+			y2-=1
+		else:m2 = str(12)
+
+		if len(str(month)) == 1:
+			month = "0"+str(month)
+
+		ite = 0
+		req = mstat.file_request(url+str(year)+month+add_1+str(y2)+m2+add_2, to=5,html=True)
+		#req = mstat.file_request(url+str(year)+str(month)+add_1+str(year)+str(month)+add_2)
+		print(str(req))
+		cats = []
+		for i in req.split("\n"):
+			if ite == 0:
+				cats=i.split(",")
+				ite+=1
+				continue
+			mod_i = {}
+			cat = 0
+			for comma in i.split(","):
+				if cat == 0:
+					mod_i["record_date"] = mstat.convert_time(comma.replace("/", "").replace("-",""))
+				else:
+					mod_i[cats[cat]] = comma
+				cat+=1
+
+			data.append(mod_i)
+
+	return data
+
+def labor_statistics_clump():
+
+	base = 'https://api.bls.gov/publicAPI/v1/timeseries/data/'
+	data = {}
+	cat_convert = {"LNS14000000":"unemploymentRate", "CWUR0000SA0L1E":'CPIUrban', "WPSFD4":"PPICommodities"}
+
+	date = datetime.datetime.now()
+	year = date.year
+	p = ""
+
+	while p == "" or (p.text).find("No Data Available") != -1:
+		args = {'seriesid':["LNS14000000", "CWUR0000SA0L1E", "WPSFD4"], 'startyear':str(year-10), 'endyear':str(year)}
+		p = requests.post(base, data=json.dumps(args), headers={'Content-type': 'application/json'})
+		year-=10
+		pdata = json.loads(p.text)
+		try:
+			for series in pdata["Results"]["series"]:
+				for item in series["data"]:
+					tim = item['year']+"-"+item["periodName"]+"-01"
+					if tim in data.keys():
+						data[tim][cat_convert[series["seriesID"]]] = item["value"]
+					else:
+						data[tim] = {}
+						data[tim][cat_convert[series["seriesID"]]] = item["value"]
+		
+		except Exception as e:
+			print("change ip")
+
+	return data	
+
+def macro_economic_factors():
+	#call above when done
+	#make sure all lists are in the same order{l-g vs g-l}
+	data = {}
+	macro = open("macro_economic_factors.json", "w+")
+	
+	print("gathering treasury interest rate data")
+	treasury_data = treasury_interest_rate()
+	for i in treasury_data:
+		data[int(float(mstat.convert_time(i["record_date"].replace("-",""))))] = {}
+		data[int(float(mstat.convert_time(i["record_date"].replace("-",""))))]["fed_interest_rate"] = i["avg_interest_rate_amt"]
+
+	print("gathering labor stats")
+	labor = labor_statistics_clump()
+
+	for l in list(labor.keys())[::-1]:
+		bell = l
+		months = ['January','February','March','April','May','June','July','August','September','October','November','December']
+		for m in months:
+			ind = str(months.index(m)+1)
+			if len(ind) == 1:
+				ind = "0"+ind
+
+			if bell.find(m)!= -1:
+				bell = bell.replace(m, ind)
+				break
+
+		bell = int(float(mstat.convert_time(bell.replace("-", ""))))
+
+		if bell not in data.keys():
+			data[bell] = {}
+
+		data[bell] = labor[l]
+
+	'''#very slow and doesnt work for some reason
+	print("gathering yield curve data")
+	yield_curves = yield_curve_dep_treasury()
+	print(yield_curves)
+	for yieldc in yield_curves:
+		print(yieldc["record_date"])
+		if yieldc["record_date"] in data.keys():
+			data[yieldc["record_date"]].update(yieldc)
+		else:
+			data[yieldc["record_date"]] = yieldc
+	'''
+	macro.write(json.dumps(data, indent=4))
+	macro.close()
