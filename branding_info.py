@@ -86,9 +86,9 @@ def top_brands():
 	f.close()
 
 def company_pricing_info(company):
-	url = "https://query1.finance.yahoo.com/v7/finance/download/"+company["tickers"][0]+"?period1=0000000001&period2="+str(int(t.time()))+"&interval=1d"
-	req = mstat.file_request(url)
-	if req.lower().find("head") != -1:
+	url = "https://query2.finance.yahoo.com/v7/finance/download/"+company["tickers"][0]+"?period1=0000000001&period2="+str(int(t.time()))+"&interval=1d"
+	req = mstat.file_request(url)#changed query 2 from 1
+	if req.lower().find("error") != -1:
 		print("pricing info request failed, trying again in 10")
 		t.sleep(6000)
 		req = mstat.file_request(url)
@@ -114,7 +114,7 @@ def volatilities(company, vol):
 	return vols
 
 def company_info_loop():
-	control.treasury_interest_rate()#only needs to be called once, where other macro indicators will go
+	control.macro_economic_factors()#only needs to be called once, where other macro indicators will go
 	#could easily put this in a different thread to run in the background
 
 	try:
@@ -127,7 +127,7 @@ def company_info_loop():
 	try:
 		os.mkdir("./competitors")
 	except Exception:
-		for i in Path("./stocks/").iterdir():
+		for i in Path("./competitors/").iterdir():
 			i.open("w+")
 			#i.close()
 
@@ -182,8 +182,8 @@ def company_info_loop():
 		start = t.time()
 		print("Digging into " + sec_company["name"])
 		sec_company = mstat.sec_filling_information(sec_company, "10-Q")
-		sec_company["trendsData"] = mstat.trends_data(sec_company["name"])#needs testing too
-		if float(sec_company["fails"])/float(len(sec_company["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
+		#sec_company["trendsData"] = mstat.trends_data(sec_company["name"])#needs testing too
+		if float(sec_company["fails"]) != 0 and len(sec_company["statisticalData"]) != 0 and float(sec_company["fails"])/float(len(sec_company["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
 			print("FAILED[] finding statistical data for: "+str(sec_company["name"]))
 			continue#skip dumping remaining info
 		
@@ -202,36 +202,46 @@ def company_info_loop():
 
 		print("Dug into " + sec_company["name"] + " took(min) " + str(round((t.time()-start)/60, 2)))
 		if sec_company["sic"] not in competitors.keys():#used to process competitors AFTER this
-			competitors[sec_company["sic"]] = sec_company["cik"]
-	'''
+			competitors[sec_company["sic"]] = [sec_company["cik"]]
+		else:
+			competitors[sec_company["sic"]].append(sec_company["cik"])
+	
 	print("Analyzing competitors:"+str(list(competitors.keys())))#test [not passed]
-	for i in competitors.keys():
-		print("Analyzing sic: "+str(i))
+	for j in competitors.keys():
+		print("Analyzing sic: "+str(j))
 
-		competitor = "./competitors/"+i+"-"
-		for x in mstat.sic_comparison(i):
-			
+		competitor = "./competitors/"+j+"-"
+		xcounter = 0
+		for x in mstat.sic_comparison(j):
+			if xcounter == 10:break#takes 4 days otherwise, 50 was too many, trying 10
+
 			jc = json.loads(x)
 			print("Starting: "+str(jc["name"]))
-			if jc["cik"] == competitors[i] or jc["entityType"] != "operating" or len(list(jc["tickers"])) == 0:continue
+			if jc["cik"] in competitors[j] or jc["entityType"] != "operating" or len(list(jc["tickers"])) == 0:continue
 			
 			c = company_pricing_info(jc)
 			c = mstat.sec_filling_information(c, "10-Q")
-			print("herehere")
 			if len(list(c["statisticalData"])) <= 10 or float(c["fails"])/float(len(c["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate, also seems to cause issues
 				print("FAILED[] finding ENOUGH statistical data for (or skipped because not enough data): "+str(c["name"]))
 				continue
 			else:
-				c["trendsData"] = mstat.trends_data(c["name"])#needs testing too
-				c["vol100"] = volatilities(c, 100)
-				c["vol365"] = volatilities(c, 365)
-				c["vol10"] = volatilities(c, 10)
-				print("writing")
-				with open(competitor+c["cik"]+".json", "w+") as f:
-					f.write(json.dumps(c, indent=4))
-					print("closing")
-					f.close()
-					print("Wrote " + c["name"] + " successfully", flush=True)
-	'''			
+				#c["trendsData"] = mstat.trends_data(c["name"])#needs testing too
+				try:
+					xcounter+=1
+					c["vol100"] = volatilities(c, 100)
+					c["vol365"] = volatilities(c, 365)
+					c["vol10"] = volatilities(c, 10)
+					
+					c["ama10"] = mstat.all_amas(c["stock_price"], 10)
+					c["ama100"] = mstat.all_amas(c["stock_price"], 100)
+					c["ama365"] = mstat.all_amas(c["stock_price"], 365)
+					with open(competitor+c["cik"]+".json", "w+") as f:
+						f.write(json.dumps(c, indent=4))
+						f.close()
+						print("Wrote " + c["name"] + " successfully", flush=True)
+
+				except ValueError:
+					continue#didnt comment
 
 company_info_loop()
+#google blocks trend data requests after two companies
