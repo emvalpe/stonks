@@ -1,9 +1,11 @@
 import json
 import requests
 from bs4 import BeautifulSoup
+import bs4
 
 import math
 import os
+import sys
 
 import time as t
 import datetime
@@ -173,7 +175,7 @@ def no_col_table(lines):
 
 def new_search_table(lines, is_html):
 	datz = {}
-	for table in lines.find_all("table"):
+	for table in lines:
 		try:
 			if is_html == True:
 				to_dict = pd.read_html(StringIO(str(table).replace("$", "")))[0]
@@ -256,10 +258,8 @@ def new_search_table(lines, is_html):
 def old_search_table(lines):
 	desired = {}
 	tab = []
-	if str(lines).find("<s>") == -1:
-		return desired
 
-	for t in lines.find_all("table"):
+	for t in BeautifulSoup(lines, "html.parser").find_all("table"):
 		table = str(t)
 		#print(table)
 		dates = (table[table.find("<caption>")+len("<caption>"):table.find("<s>")]).split("\n")
@@ -343,8 +343,8 @@ def sic_comparison(company):
 	return competitors
 
 def sec_filling_information(company, target):
-	company.update({"statisticalData":[]})
-	desired_data = ["net income", "gross margin", "total shareholders' equity"]
+	company["statisticalData"] = []
+	company["fails"] = 0
 	ite = 0
 	bad_ite = 0
 
@@ -353,6 +353,7 @@ def sec_filling_information(company, target):
 	for f in company["filings"]["recent"]["form"]:
 		if f.upper() == target:total+=1
 	#SEC 600/min
+
 	for i in range(len(company["filings"]["recent"]["accessionNumber"])):
 		if str(company["filings"]["recent"]["form"][i]).upper() == target or company["filings"]["recent"]["form"][i].upper().find(target) != -1:
 			ite += 1
@@ -361,92 +362,68 @@ def sec_filling_information(company, target):
 			filing_url += fil + "/" + company["filings"]["recent"]["accessionNumber"][i] + ".txt"
 			
 			extra_stats = {}
-			result = (file_request(filing_url)).replace("\u2019", "'").lower().replace("\t", " ")
-			doc_body = ""
 
-			if result.find("<type>") != -1:
-				typ = result[result.find("<type>")+6:]
-				newl = typ.find("\n")
-				typ = typ[:newl]
-				if typ == "10-q" or typ.find("10-q") != -1:
-					hunt = True
+			doc = ""
 
-			if result.find("<text>") != -1:
-				doc_body=(result[result.find("<text>"):result.find("</text>")])
+			result = (file_request(filing_url))#.replace("\u2019", "'").lower().replace("\t", " ")
+			try:
+				for file in BeautifulSoup(result[result.find('</SEC-HEADER>')+len('</SEC-HEADER>'):],'html.parser'):
+					sfile = str(file).lower()
+					desc = sfile[sfile.find('<DESCRIPTION>'.lower()):]
+					desc = desc[:desc.find("\n")]
+					if just_alpha(desc).lower().find(just_alpha(target).lower()) != -1:
+						doc = sfile
+						break
+					elif sfile.find("<text>") != -1:
+						doc = sfile[sfile.find("<text>"):sfile.find("</text>")]
+						break
+					else:
+						pass
 
-			doc = doc_body
-			is_html = True
 
-			if doc[:20].find("<xbrl>") != -1:#modern
-				bs = BeautifulSoup(doc[doc.find("<?xml"):doc.find("</xml>")], "xml")
-				is_html = False
-				extra_stats = new_search_table(bs, is_html)
-				extra_stats["method"] = 3
-			elif doc[:21].find("html") != -1:#second oldest
-				bs = BeautifulSoup(doc[doc.find("<html"):doc.find("</html>")].replace("..", " "), "html.parser")
-				extra_stats = new_search_table(bs, is_html)
-				extra_stats["method"] = 2
-			else:#oldest
-				bs = BeautifulSoup(doc, "html.parser")
-				extra_stats = old_search_table(bs)
-
-				if len(extra_stats.keys()) == 0:
-					extra_stats = no_col_table(bs)
-
-				extra_stats["method"] = 1		
-
-			for k in list(extra_stats.keys()):
-				if extra_stats[k] == {}:
-					del extra_stats[k] 
-
-				elif k.isnumeric() and k != "method" and int(just_alpha(k)) < 19700000:
-					del extra_stats[k]
+			except bs4.builder.ParserRejectedMarkup as e:
+				print(str(e))
+				company["fails"] +=1
 					
-				elif ((not k.isnumeric() or len(k) != 8) and k != "method") or extra_stats[k] == "":
-					del extra_stats[k]
+			except AssertionError as g:
+				print(str(g))
+				company["fails"] +=1
+		
+			if doc != "":
+				if (doc.lower()).find("<s>") == -1 and (doc.lower()).find("<s>") == -1:
+					doc = list(BeautifulSoup(doc, "html.parser").find_all("table"))
+					#print(str(list(doc.find_all(recursive=False))))
+					extra_stats = new_search_table(doc, True)
+					extra_stats["method"] = 1
 				else:
-					pass
-
-				if k != "method" and k in extra_stats.keys():
-					for kk in list((extra_stats[k]).keys()):
-						if type(kk) == type(9) or type(kk) == type(0.9):continue
-						if kk.find("  ") != -1:
-							key_mod = k.replace("  ", " ")
-							extra_stats[k][key_mod] = extra_stats[k][kk]
-							del extra_stats[k][kk]
-						elif len(just_alpha(kk, spaces=True)) != len(kk):
-							key_mod = ""
-							for char in kk:
-								if char.isalnum() or char == " " or char == "," or char == "-":
-									key_mod+=char
-								else:
-									break
-
-							extra_stats[k][key_mod] = extra_stats[k][kk]
-							del extra_stats[k][kk]
-				
-
-			if len(extra_stats.keys()) == 1:
-				#print(filing_url)#uncomment when debugging
-				bad_ite+=1
-
-			extra_stats["scale"] = find_scaling_per_doc(bs)
+					extra_stats = old_search_table(doc)
+					extra_stats["method"] = 2
+			
+			else:
+				print("failed: "+(filing_url))
+				f = open("failure.txt", "w+")
+				f.write(result)
+				f.close()
+				extra_stats["method"] = 0
+					
+			#print(extra_stats["method"])
 			extra_stats["url"] = filing_url
 			extra_stats["filingDate"] = just_alpha(company["filings"]["recent"]["filingDate"][i])
 			company['statisticalData'].append(extra_stats)
 
-			if ite%20 == 0:
-				print("Percent complete: " + str(round(((ite-1)/total)*100, 2)) + "%\nTime since start of company analysis(min): " + str(round((t.time()-start)/60, 2)))
+	for elem in range(len(company["statisticalData"])):
+		for d in list(company["statisticalData"][elem].keys()):
+			if d in ["method", "url", "filingDate"]:continue
+			
+			copy = company["statisticalData"][elem][d]
+			for key in list(company["statisticalData"][elem][d].keys()):
+				if str(company["statisticalData"][elem][d][key]).isnumeric() and str(copy[key]).encode("ascii", "ignore").decode("ascii", "ignore") != "":
+					company["statisticalData"][elem][d][str(key).encode('ascii', "ignore").decode('ascii', "ignore")] = int(str(copy[key]).encode("ascii", "ignore").decode("ascii", "ignore"))
+					if str(key).encode('unicode_escape').decode('unicode_escape') != key:
+						del company["statisticalData"][elem][d][key]
+				else:
+					del company["statisticalData"][elem][d][key]
 
-	last = ""
-	for z in company['statisticalData'][::-1]:
-		if z["scale"] != "":
-			last = z["scale"]
-		else:
-			z["scale"] = last
-
-	company["fails"] = bad_ite
-	print(str(ite)+" filings searched: "+str(bad_ite))
 	return company
 
 
