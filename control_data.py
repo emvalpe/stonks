@@ -168,7 +168,7 @@ def crude_oil(execution_type):
 
 		else:
 			wdir = open("./crude_oil/"+i.split("/")[1]+".txt", "w+")
-			print("Source: "+i)
+			#print("Source: "+i)
 			for j in data["dataset"]["data"]:
 				wdir.write(j[0]+":"+str(j[1])+ str(j[7]) +"\n")
 			
@@ -257,10 +257,10 @@ def update():#for daily usage
 
 #generate_graph()#update()
 
-#gold_valuation("")
-#eth_valuation("")
-#btc_valuation("")
-
+gold_valuation("")
+eth_valuation("")
+btc_valuation("")
+crude_oil("")
 
 def treasury_interest_rate():#use for federalinterest
 	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"#hardcoded 500 total dps
