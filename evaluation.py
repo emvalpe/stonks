@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import math
 import random
-import os
+import os, gc
 
 import tensorflow.keras as keras
 import tensorflow as tf
@@ -74,7 +74,7 @@ def all_nn_ready():
 					if len(i.keys()) < 4:bad+=1
 
 				
-				if bad/len(company["statisticalData"]) > 0.1:
+				if bad/len(company["statisticalData"]) > 0.3:
 					print("skipping: "+str(company["name"]))
 
 				else:
@@ -298,7 +298,7 @@ def while_less(data, times, target_time):
 	else:
 		return np.nan	
 
-def dict_to_arr(data):
+def dict_to_arr(data, competitor):
 	arr = {}
 
 	for date in data["stock_price"]:
@@ -320,94 +320,98 @@ def dict_to_arr(data):
 
 			first_iter+=1
 		
-		for competitor in company["competitors"].keys():
-			comper = company["competitors"][competitor]
-			if int(dat) in comper.keys():
-				for ccat in comper[int(dat)]:
-					data_at_utc[ccat+competitor] = comper[int(dat)][ccat]
-
-		try:
-			for mfactor in data["macros"]["macro_factors"].keys():
-				if dat in data["macros"]["macro_factors"][mfactor]["time"]:
-					data_at_utc["macros_"+mfactor] = (float(data["macros"]["macro_factors"][mfactor]["value"][data["macros"]["macro_factors"][mfactor]["time"].index(dat)]))
-				else:
-					d = while_less(data["macros"]["macro_factors"][mfactor]["value"],data["macros"]["macro_factors"][mfactor]["time"],dat)
-					if d.find("None") == -1:data_at_utc["macros_"+mfactor] = (float(d))
-					else:data_at_utc["macros_"+mfactor] =np.nan
-
-			for control in ["gold", "oil", "crypto"]:#gold:low-high, oil:high-low[flipped], crypto:low-high
-				for subcontrol in data["macros"][control].keys():
-					subc = data["macros"][control][subcontrol]
-					dp = while_less(subc["price"], subc["time"], dat)
-					
-					if str(dp).find("None") == -1:
-						data_at_utc[control+":"+subcontrol] = float(dp)
-					else:
-						data_at_utc[control+":"+subcontrol] = np.nan
-		
-		except KeyError:
-			pass#pass, not present if competitor
-
-
-		fdates = []
-		for filing in data["statisticalData"]:#high low
-			fdates.append(int(float(mstat.convert_time(filing["filingDate"]))))
-
-		second_iter = 0
-		try:
-			while fdates[second_iter] > dat:
-				second_iter+=1
-
-			quarterly = data["statisticalData"][second_iter]
-			if "scale" in quarterly.keys():
-				scale = quarterly["scale"]
-			else:
-				scale = ""
+		if competitor == False:
+			#print(company["competitors"].keys())
+			for g in data["competitors"].keys():
+				comper = data["competitors"][g]
+				#print(comper.keys())
+				if dat in list(comper.keys()):
+					#print(comper[int(dat)])
+					for ccat in comper[int(dat)].keys():
+						data_at_utc[ccat+"_"+g] = comper[int(dat)][ccat]
 				
-			if scale == "million":
-				scale = 1000000
-			elif scale == "thousand":
-				scale = 1000
-			else:
-				scale=1
-				pass#when scale == ''
+			try:
+				for mfactor in data["macros"]["macro_factors"].keys():
+					if dat in data["macros"]["macro_factors"][mfactor]["time"]:
+						data_at_utc["macros_"+mfactor] = (float(data["macros"]["macro_factors"][mfactor]["value"][data["macros"]["macro_factors"][mfactor]["time"].index(dat)]))
+					else:
+						d = while_less(data["macros"]["macro_factors"][mfactor]["value"],data["macros"]["macro_factors"][mfactor]["time"],dat)
+						if d.find("None") == -1:data_at_utc["macros_"+mfactor] = (float(d))
+						else:data_at_utc["macros_"+mfactor] =np.nan
 
-			third_iter = 0
-			kkey = ""
-			kkeys = []
+				for control in ["gold", "oil", "crypto"]:#gold:low-high, oil:high-low[flipped], crypto:low-high
+					for subcontrol in data["macros"][control].keys():
+						subc = data["macros"][control][subcontrol]
+						dp = while_less(subc["price"], subc["time"], dat)
+						
+						if str(dp).find("None") == -1:
+							data_at_utc[control+":"+subcontrol] = float(dp)
+						else:
+							data_at_utc[control+":"+subcontrol] = np.nan
+			
+			except KeyError:
+				pass#pass, not present if competitor
 
-			for key in quarterly.keys():
-				if key in ["method", "scale", "url", "filingDate"]:continue
-					#take into account there should be assumed two and fill with nans if not
-				third_iter+=1
-				kkey = key
-				kkeys = list(quarterly[key].keys())
+			'''
+			fdates = []
+			for filing in data["statisticalData"]:#high low
+				fdates.append(int(float(mstat.convert_time(filing["filingDate"]))))
 
-				for k in kkeys:
-					try:
-						if quarterly[key][k].isnumeric():data_at_utc[key+":"+k] = float(int(quarterly[key][k])*scale)
-					except AttributeError:
-						data_at_utc[key+":"+k] = float((quarterly[key][k])*scale)
+			second_iter = 0
+			try:
+				while fdates[second_iter] > dat:
+					second_iter+=1
 
-			if third_iter < 3:
-				if "6 months" not in data_at_utc.keys():
-					for k in kkeys:
-						data_at_utc["6 months:"+k] = np.nan
-				elif "3 months" not in data_at_utc.keys():
-					for k in kkeys:
-						data_at_utc["3 months:"+k] = np.nan
-				elif "12 months" not in data_at_utc.keys():
-					for k in kkeys:
-						data_at_utc["12 months:"+k] = np.nan
+				quarterly = data["statisticalData"][second_iter]
+				if "scale" in quarterly.keys():
+					scale = quarterly["scale"]
 				else:
-					print("what??")
+					scale = ""
+					
+				if scale == "million":
+					scale = 1000000
+				elif scale == "thousand":
+					scale = 1000
+				else:
+					scale=1
+					pass#when scale == ''
 
-		except IndexError as e:
-			pass
-			#print(str(e))
-			#print(dat)
-			#print(fdates)
+				third_iter = 0
+				kkey = ""
+				kkeys = []
 
+				for key in quarterly.keys():
+					if key in ["method", "scale", "url", "filingDate"]:continue
+						#take into account there should be assumed two and fill with nans if not
+					third_iter+=1
+					kkey = key
+					kkeys = list(quarterly[key].keys())
+
+					for k in kkeys:
+						try:
+							if quarterly[key][k].isnumeric():data_at_utc[key+":"+k] = float(int(quarterly[key][k])*scale)
+						except AttributeError:
+							data_at_utc[key+":"+k] = float((quarterly[key][k])*scale)
+
+				if third_iter < 3:
+					if "6 months" not in data_at_utc.keys():
+						for k in kkeys:
+							data_at_utc["6 months:"+k] = np.nan
+					elif "3 months" not in data_at_utc.keys():
+						for k in kkeys:
+							data_at_utc["3 months:"+k] = np.nan
+					elif "12 months" not in data_at_utc.keys():
+						for k in kkeys:
+							data_at_utc["12 months:"+k] = np.nan
+					else:
+						print("what??")
+
+			except IndexError as e:
+				pass
+				#print(str(e))
+				#print(dat)
+				#print(fdates)
+			'''
 		for vol in ["10", "100", "365"]:#low to high
 			if dat in data["vol"+vol]["time"]:
 				data_at_utc["vol"+vol] = data["vol"+vol]["price"][data["vol"+vol]["time"].index(dat)]
@@ -422,30 +426,164 @@ def dict_to_arr(data):
 
 
 		arr[int(dat)] = data_at_utc
+		'''if competitor == False:
+			print(len(data_at_utc.keys()))'''
 
 	return arr
 
 def model_graph_generator(model_history, company_name):
+	plt.clf()
 	plt.semilogy(range(len(model_history)),model_history)
-	plt.savefig("./figs/"+company_name.replace(" ", "_")+".png")
+	plt.savefig("./figs/"+company_name.replace(" ", "_").replace(".", "")+".png")
+	plt.clf()#maybe try plt.close()
+	#less then 10^2, linear instead of log
+	plt.plot(range(len(model_history)),model_history)
+	plt.ylim([0,100])
+	plt.savefig("./figs/removed_outliers_"+company_name.replace(" ", "_").replace(".", "")+".png")
 
+def accuracy_graph(x, x2, company_name):
+	plt.clf()
+	plt.plot(x, label="expected")
+	plt.plot(x2, label="predicted")
+	plt.legend()
+	plt.savefig("./figs/accuracy_"+company_name.replace(" ", "_").replace(".", "")+".png")
+
+def main_wrapper(macro_economic_factors, comp):
+	model_history = []
+
+	print("starting: "+comp["name"])
+	company = remove_uncommon_categories(comp)
+	company["competitors"] = {}
+	results = []
+
+	num = 0
+	for i in Path("./competitors/").iterdir():
+		pi = str(i).split("/")[1]
+		if pi.find(comp["sic"]) == 0:
+			filefile = open("./"+str(i), "r")
+			
+			l = ""
+			lines = readlines(filefile)
+			for t in lines:
+				l += t
+			l = json.loads(l)
+
+			cik = (str(filefile).split("-")[1])
+			print("Finding competitor: "+str(cik[:cik.find(".")]))
+			company["competitors"][cik[:cik.find(".")]] = dict_to_arr(remove_uncommon_categories(l), True)
+			del l
+			filefile.close()
+			num+=1
+
+			#if num == 6:break
+
+	print("Loaded competitors")
+	company["macros"] = macro_economic_factors
+
+	data = dict_to_arr(company, False)
+	pdata = pd.DataFrame(data).T
+	pdata.to_csv("./input_data/test_"+company["name"]+".csv")
+
+	del data
+
+	inputdata = []#input data for each
+	outputdata = []
+
+	ite = 0#what is this?
+	length = len(pdata.index)-1
+	for i, r in pdata.iterrows():
+		if ite != 0:outputdata.append(r["price1"])
+		if length != ite:inputdata.append(r)
+
+		ite+=1
+	
+	print("length of input data: "+str(len(list((inputdata[0]).keys()))))
+	inputdata = pd.DataFrame(inputdata).dropna(axis=0, thresh=10).dropna(axis=1, how="any")
+	outputdata = pd.DataFrame(outputdata)
+
+	ishape = str(inputdata.shape)
+	cols = int(str(ishape.split(",")[1]).replace(")", "").replace(" ", ""))
+	if cols == 0:
+		#print("skipping: "+company["name"])
+		return
+	print(ishape)
+	print(str(outputdata.shape))
+	
+	model = keras.Sequential()
+	input_layer = keras.layers.Dense(cols)
+	hidden_layer = keras.layers.Dense(
+		math.ceil((cols)*(1.25)),
+		activation="sigmoid",
+		use_bias=False)
+	output_layer = keras.layers.Dense(1, activation="linear")
+	model.add(input_layer)
+	model.add(hidden_layer)
+	model.add(output_layer)
+	
+	callb = [
+		keras.callbacks.ModelCheckpoint("./models/"+just_alpha(company["name"])+("/{mean_squared_error:.2f}.keras"), monitor="mean_squared_error")#batch was removed for now
+	]
+	
+	model.compile(optimizer="adam", loss="mean_squared_error", metrics=["mean_squared_error"])
+	#what?????????????	
+	h = model.fit(x=inputdata, y=outputdata, validation_split=0.1, epochs=50, callbacks=callb)#, verbose=0)#maybe config batchsize
+	results.append(h.history["mean_squared_error"])
+	model_history.append(h.history["mean_squared_error"])#plotting model.history.history gives loss and mse 
+	accuracy_graph(outputdata, model.predict(inputdata), company["name"])
+	models = []
+	fs = []
+	seeds = gen_seed(gen_seed_func(cols), 10)#model_evolution hardcoded to split list by 5
+	print(":::::::::::)Starting Mutation of Network")
+	for i in range(10):
+		if i == 0:
+			models, fs = model_evolution(models, seeds, results, cols)
+		else:
+			models, fs = model_evolution(models, seeds, results, fs)
+		
+		seeds = gen_seed(gen_seed_func(cols), 10)
+		results = []
+		for mod in models:
+			model.compile(optimizer="adam",loss="mean_squared_error", metrics=["mean_squared_error"])
+			h = model.fit(x=inputdata, y=outputdata, validation_split=0.1, epochs=50, callbacks=callb)#, verbose=0)
+			model_history.append(h.history["mean_squared_error"])
+			results.append(h.history["mean_squared_error"])
+
+	print("plotting the results")
+	model_graph_generator(model_history, company["name"])
+
+	del inputdata, outputdata, company, pdata, models, model, results, h, fs, seeds, ishape, model_history
+	#
 
 try:
 	os.mkdir("./input_data")
 except Exception:
 	for i in Path("./input_data").iterdir():
-		i.open("w+")
+		i.unlink()
 
-for i in Path("./competitors").iterdir():
-	
+for i in Path("./competitors").iterdir():#remove empty competitors
 	if len(i.open("r").read()) < 30:
 		i.unlink()
+
+try:
+	os.mkdir("./models")
+except Exception:
+	for i in Path("./models").iterdir():
+		lowest = 1000
+		for j in i.iterdir():
+			if lowest < float(str(j).replace(".keras", "").split("/")[2]):
+				lowest = float(str(j).replace(".keras", "").split("/")[2])
+			else:
+				j.unlink()
+
+		for j in i.iterdir():
+			if str(j).find(str(lowest)) == -1:
+				j.unlink()
 
 try:
 	os.mkdir("./figs")
 except Exception:
 	for i in Path("./figs").iterdir():
-		i.open("w+")
+		i.unlink()
 
 macro_economic_factors = {"macro_factors" : {}, "oil":{}, "crypto":{}, "gold":{}}
 with open("macro_economic_factors.json", "r") as f:
@@ -485,100 +623,14 @@ for crypto in Path("./crypto/").iterdir():
 		macro_economic_factors["crypto"][str(crypto)]["price"].append(colon[1])
 
 #so this var will be needed for network gen
-
+gc.enable()
 for comp in all_nn_ready():	
-	model_history = []
+	main_wrapper(macro_economic_factors, comp)
+	gc.collect()#<-every iteration
+	for i in gc.get_objects():
+		del i
 
-	print("starting: "+comp["name"])
-	company = remove_uncommon_categories(comp)
-	company["competitors"] = {}
-	results = []
-
-	for i in Path("./competitors/").iterdir():
-		pi = str(i).split("/")[1]
-		if pi.find(comp["sic"]) == 0:
-			filefile = open("./"+str(i), "r")
-
-			cik = (str(filefile).split("-")[1])
-			print("Finding competitor: "+str(cik[:cik.find(".")]))
-			company["competitors"][cik[:cik.find(".")]] = dict_to_arr(json.load(filefile))
-	
-	print("Loaded competitors")
-	company["macros"] = macro_economic_factors
-	data = dict_to_arr(company)
-
-	pdata = pd.DataFrame(data).T
-
-	inputdata = []#input data for each
-	outputdata = []
-
-	ite = 0
-	length = len(pdata.index)-1
-	for i, r in pdata.iterrows():
-		if ite != 0:outputdata.append(r["price1"])
-		if length != ite:inputdata.append(r)
-
-		ite+=1
-	print("length of input data: "+str(len(list((inputdata[0]).keys()))))
-	
-	inputdata = pd.DataFrame(inputdata).dropna(axis=1, how="any")
-	inputdata.to_csv("./input_data/test_"+company["name"]+".csv")
-	outputdata = pd.DataFrame(outputdata)
-
-	ishape = str(inputdata.shape)
-	cols = int((ishape.split(",")[1]).replace(")", "").replace(" ", ""))
-	if cols == 0:
-		print("skipping: "+company["name"])
-		continue
-	print(ishape)
-	print(str(outputdata.shape))
-	
-	model = keras.Sequential()
-	input_layer = keras.layers.Dense(cols)
-	hidden_layer = keras.layers.Dense(
-		math.ceil((cols)*(1.25)),
-		activation="sigmoid",
-		use_bias=False)
-	output_layer = keras.layers.Dense(1, activation="linear")
-
-	callb = [
-		keras.callbacks.ModelCheckpoint("./models/"+company["name"].replace(" ", "_")+("/{mean_squared_error:.2f}.keras"), monitor="mean_squared_error")#batch was removed for now
-	]
-	model.add(input_layer)
-	model.add(hidden_layer)
-	model.add(output_layer)
-
-	model.compile(optimizer="adam", loss="mean_squared_error", metrics=("mean_squared_error"))
-	#what?????????????	
-	h = model.fit(x=inputdata, y=outputdata, validation_split=0.1, epochs=100, callbacks=callb, verbose=0)#maybe config batchsize
-	results.append(h.history["mean_squared_error"])
-	model_history.append(h.history["mean_squared_error"])#plotting model.history.history gives loss and mse 
-	
-	models = []
-	fs = []
-	seeds = gen_seed(gen_seed_func(cols), 10)#model_evolution hardcoded to split list by 5
-	print(":::::::::::)Starting Mutation of Network")
-	for i in range(5):
-		if i == 0:
-			models, fs = model_evolution(models, seeds, results, cols)
-		else:
-			models, fs = model_evolution(models, seeds, results, fs)
-		
-		seeds = gen_seed(gen_seed_func(cols), 10)
-		results = []
-		for mod in models:
-			model.compile(optimizer="adam",loss="mean_squared_error", metrics="mean_squared_error")
-			h = model.fit(x=inputdata, y=outputdata, validation_split=0.1, epochs=100, callbacks=callb, verbose=0)
-			model_history.append(h.history["mean_squared_error"])
-			results.append(h.history["mean_squared_error"])
-
-	print("plotting the results")
-	model_graph_generator(model_history, company["name"])
-
-'''
-- for statistical data set presence 90% [test]
-'''
-
-#testing against the next day's open, should be index 0 in raw csv 
+##general info##
+#testing against the next day's open, the change in the next days open
 #structure: inp-sigmoid-linear is the best thus far[test layer mutation, adding H layers]
-	#-record on this structure: 52 mse
+#-record on this structure: 7 mse
