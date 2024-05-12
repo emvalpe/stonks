@@ -399,6 +399,19 @@ def sec_filling_information(company, target):
 					extra_stats = old_search_table(doc)
 					extra_stats["method"] = 2
 			
+				for ggg in list(extra_stats.keys()):
+					try: 
+						new_key = convert_time(ggg)
+						old_val = extra_stats[ggg]
+						del extra_stats[ggg]
+						extra_stats[new_key] = old_val
+
+					except Exception as e:
+						pass
+						'''
+						print(e)
+						print("recent mod above")'''
+
 			else:
 				print("failed: "+(filing_url))
 				f = open("failure.txt", "w+")
@@ -414,7 +427,7 @@ def sec_filling_information(company, target):
 	for elem in range(len(company["statisticalData"])):
 		for d in list(company["statisticalData"][elem].keys()):
 			if d in ["method", "url", "filingDate"]:continue
-			
+			#print(d)
 			copy = company["statisticalData"][elem][d]
 			for key in list(company["statisticalData"][elem][d].keys()):
 				if str(company["statisticalData"][elem][d][key]).isnumeric() and str(copy[key]).encode("ascii", "ignore").decode("ascii", "ignore") != "":
@@ -449,6 +462,8 @@ def trends_data(company_str, execution_type=""):
 	return py.interest_over_time().to_json()
 
 def ama(prices):
+	if(len(prices) == 0):
+		return 1
 
 	average = 0
 	for p in prices:
@@ -462,12 +477,21 @@ def all_amas(data, length):
 	amas = {}
 	amas["time"] = []
 	amas["price"] = []
-	for i in data:
-		to_pass.append(i.split(",")[1])
+	ama_iter = 0
+	offset = 0
+
+	for i in list(data.keys()):
+		try:
+			to_pass.append(data[offset]["Open"])
+		except Exception:
+			pass#ignore for failed search of 0
 		if len(to_pass) > length:
 			to_pass.pop()
 		
-		amas["time"].append(i.split(",")[0]) 
+		amas["time"].append(i)
 		amas["price"].append(ama(to_pass))
+		
+		offset = i
+		ama_iter+=1
 
 	return amas
