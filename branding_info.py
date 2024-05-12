@@ -5,6 +5,8 @@ from selenium.webdriver.common.action_chains import ActionChains
 
 import random as r
 import time as t
+import datetime
+
 import json
 import requests
 import os
@@ -13,6 +15,8 @@ from pathlib import Path
 import market_stats as mstat
 import control_data as control
 import pandas
+
+import nasdaqdatalink as ndl
 
 def search_for_company(name):#returns list of possible candidates
 	sec_data = open("processed.json", "r")
@@ -86,14 +90,20 @@ def top_brands():
 	f.close()
 
 def company_pricing_info(company):
-	url = "https://query2.finance.yahoo.com/v7/finance/download/"+company["tickers"][0]+"?period1=0000000001&period2="+str(int(t.time()))+"&interval=1d"
-	req = mstat.file_request(url)#changed query 2 from 1
-	if req.lower().find("error") != -1:
-		print("pricing info request failed, trying again in 10")
-		t.sleep(6000)
-		req = mstat.file_request(url)
+	try:
+		company["stock_price"] = ndl.get("WIKI/"+company["tickers"][0].upper()).to_dict()
+	except ndl.errors.data_link_error.NotFoundError:
+		print("WIKI/"+company["tickers"][0].upper())
+		return {}
 
-	company["stock_price"] = (req).split("\n")[1:]
+	times = list(company["stock_price"]["Open"].keys())
+	data = {}
+	for t in times:
+		data[int(t.timestamp())] = {}
+		for k in company["stock_price"].keys():
+			data[int(t.timestamp())][k] = company["stock_price"][k][t]
+
+	company["stock_price"] = data
 	return company 
 
 def volatilities(company, vol):
@@ -102,19 +112,29 @@ def volatilities(company, vol):
 	vols["price"] = []
 
 	to_pass = []
-	for value in company["stock_price"][1:]:
-		to_pass.append(value.split(",")[1])
+	time_offset = 0
+	tp_iter = 0
+	for value in list(company["stock_price"].keys()):
+		try:
+			to_pass.append(company["stock_price"][time_offset]["Open"])
+		except Exception:
+			pass#ignore for failed search of 0
 
-		if len(to_pass) == vol:
-			vols["time"].append(mstat.convert_time(value.split(",")[0]))
+		if len(to_pass) == vol and tp_iter != 0:
+			vols["time"].append(value)
 			vols["price"].append(mstat.volatility(to_pass))
 			
 			to_pass.pop()
+
+		time_offset = value
+		tp_iter += 1
 
 	return vols
 
 def company_info_loop():
 	control.macro_economic_factors()#only needs to be called once, where other macro indicators will go
+	ndl.ApiConfig.api_key = "D_ovDC58EdaUqmb_rzcG"
+	print("got macro economic factors")
 	#could easily put this in a different thread to run in the background
 
 	try:
@@ -175,6 +195,8 @@ def company_info_loop():
 
 		company["name"] = str(company["name"]).replace("/", "")
 		sec_company = company_pricing_info(company)
+		if len(list(sec_company.keys())) == 0:
+			continue
 
 		if type(sec_company) == list:
 			print("Multiple results for: " + company)
@@ -196,7 +218,10 @@ def company_info_loop():
 		sec_company["ama365"] = mstat.all_amas(sec_company["stock_price"], 365)
 		#fill empty categories with previous values and remove extra dates
 		f = open("./stocks/"+(sec_company["tickers"][0]).lower()+".json", "w+")
-		json.dump(sec_company, f, indent=4)
+		try:
+			json.dump(sec_company, f, indent=4)
+		except Exception:
+			f.write(json.dumps(str(sec_company), indent=4))#use to find bad keys
 		f.close()
 		
 
@@ -220,6 +245,9 @@ def company_info_loop():
 			if jc["cik"] in competitors[j] or jc["entityType"] != "operating" or len(list(jc["tickers"])) == 0:continue
 			
 			c = company_pricing_info(jc)
+			if len(list(c.keys())) == 0:
+				continue
+				
 			c = mstat.sec_filling_information(c, "10-Q")
 			if len(list(c["statisticalData"])) <= 10 or float(c["fails"])/float(len(c["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate, also seems to cause issues
 				print("FAILED[] finding ENOUGH statistical data for (or skipped because not enough data): "+str(c["name"]))
