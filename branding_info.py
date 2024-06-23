@@ -92,16 +92,24 @@ def top_brands():
 def company_pricing_info(company):
 	try:
 		company["stock_price"] = ndl.get("WIKI/"+company["tickers"][0].upper()).to_dict()
-	except ndl.errors.data_link_error.NotFoundError:
-		print("WIKI/"+company["tickers"][0].upper())
+	except ndl.errors.data_link_error.NotFoundError:#not on the nasdaq
+		#print("WIKI/"+company["tickers"][0].upper())
 		return {}
 
 	times = list(company["stock_price"]["Open"].keys())
 	data = {}
+	previous_data = {}
 	for t in times:
 		data[int(t.timestamp())] = {}
 		for k in company["stock_price"].keys():
-			data[int(t.timestamp())][k] = company["stock_price"][k][t]
+			try:
+				data[int(t.timestamp())][k] = float(company["stock_price"][k][t]/previous_data[k])
+			except KeyError:
+				data[int(t.timestamp())][k] = float(0)
+			except ZeroDivisionError:
+				data[int(t.timestamp())][k] = (company["stock_price"][k][t]/1)
+
+			previous_data[k] = company["stock_price"][k][t]
 
 	company["stock_price"] = data
 	return company 
@@ -130,6 +138,23 @@ def volatilities(company, vol):
 		tp_iter += 1
 
 	return vols
+
+def arr_to_percent(arr):
+	t = 1
+	new_arr = []
+	ite = 0
+	for i in arr:
+		if not ite:
+			new_arr.append(float(t))
+		elif t == 0:
+			new_arr.append(float(1))
+		else:
+			new_arr.append(float((i/t)))
+				
+		t = i
+		ite+=1
+
+	return new_arr
 
 def company_info_loop():
 	control.macro_economic_factors()#only needs to be called once, where other macro indicators will go
@@ -194,6 +219,7 @@ def company_info_loop():
 			continue
 
 		company["name"] = str(company["name"]).replace("/", "")
+		#add here
 		sec_company = company_pricing_info(company)
 		if len(list(sec_company.keys())) == 0:
 			continue
@@ -203,19 +229,43 @@ def company_info_loop():
 
 		start = t.time()
 		print("Digging into " + sec_company["name"])
+		#some how here too
 		sec_company = mstat.sec_filling_information(sec_company, "10-Q")
 		#sec_company["trendsData"] = mstat.trends_data(sec_company["name"])#needs testing too
 		if float(sec_company["fails"]) != 0 and len(sec_company["statisticalData"]) != 0 and float(sec_company["fails"])/float(len(sec_company["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
 			print("FAILED[] finding statistical data for: "+str(sec_company["name"]))
 			continue#skip dumping remaining info
 		
-		sec_company["vol10"] = volatilities(sec_company, 10)
-		sec_company["vol100"] = volatilities(sec_company, 100)
-		sec_company["vol365"] = volatilities(sec_company, 365)
+		vol = volatilities(sec_company, 10)
+		sec_company["vol10"] = {}
+		sec_company["vol10"]["time"] = vol["time"]
+		sec_company["vol10"]["price"] = arr_to_percent(vol["price"])
 		
-		sec_company["ama10"] = mstat.all_amas(sec_company["stock_price"], 10)
-		sec_company["ama100"] = mstat.all_amas(sec_company["stock_price"], 100)
-		sec_company["ama365"] = mstat.all_amas(sec_company["stock_price"], 365)
+		vol = volatilities(sec_company, 100)
+		sec_company["vol100"] = {}
+		sec_company["vol100"]["time"] = vol["time"]
+		sec_company["vol100"]["price"] = arr_to_percent(vol["price"])
+		
+		vol = volatilities(sec_company, 365)
+		sec_company["vol365"] = {}
+		sec_company["vol365"]["time"] = vol["time"]
+		sec_company["vol365"] = arr_to_percent(vol["price"])
+		
+		ama = mstat.all_amas(sec_company["stock_price"], 10)
+		sec_company["ama10"] = {}
+		sec_company["ama10"]["price"] = arr_to_percent(ama["price"])
+		sec_company["ama10"]["time"] = ama["time"]
+
+		ama = mstat.all_amas(sec_company["stock_price"], 100)
+		sec_company["ama100"] = {}
+		sec_company["ama100"]["price"] = arr_to_percent(ama["price"])
+		sec_company["ama100"]["time"] = ama["time"]
+
+		ama = mstat.all_amas(sec_company["stock_price"], 365)
+		sec_company["ama365"] = {}
+		sec_company["ama365"]["price"] = arr_to_percent(ama["price"])
+		sec_company["ama365"]["time"] = ama["time"]
+
 		#fill empty categories with previous values and remove extra dates
 		f = open("./stocks/"+(sec_company["tickers"][0]).lower()+".json", "w+")
 		try:
@@ -238,13 +288,14 @@ def company_info_loop():
 		competitor = "./competitors/"+j+"-"
 		xcounter = 0
 		for x in mstat.sic_comparison(j):
-			if xcounter == 10:break#takes 4 days otherwise, 50 was too many, trying 10
+			if xcounter == 30:break#takes 4 days otherwise, 50 was too many, trying 10
 
 			jc = json.loads(x)
 			print("Starting: "+str(jc["name"]))
 			if jc["cik"] in competitors[j] or jc["entityType"] != "operating" or len(list(jc["tickers"])) == 0:continue
 			
 			c = company_pricing_info(jc)
+			#if c["exchanges"].find("NYSE") != -1:continue#uncomment to check
 			if len(list(c.keys())) == 0:
 				continue
 				
@@ -256,13 +307,36 @@ def company_info_loop():
 				#c["trendsData"] = mstat.trends_data(c["name"])#needs testing too
 				try:
 					xcounter+=1
-					c["vol100"] = volatilities(c, 100)
-					c["vol365"] = volatilities(c, 365)
-					c["vol10"] = volatilities(c, 10)
+					vol = volatilities(c, 10)
+					c["vol10"] = {}
+					c["vol10"]["time"] = vol["time"]
+					c["vol10"]["price"] = arr_to_percent(vol["price"])
 					
-					c["ama10"] = mstat.all_amas(c["stock_price"], 10)
-					c["ama100"] = mstat.all_amas(c["stock_price"], 100)
-					c["ama365"] = mstat.all_amas(c["stock_price"], 365)
+					vol = volatilities(c, 100)
+					c["vol100"] = {}
+					c["vol100"]["time"] = vol["time"]
+					c["vol100"]["price"] = arr_to_percent(vol["price"])
+					
+					vol = volatilities(c, 365)
+					c["vol365"] = {}
+					c["vol365"]["time"] = vol["time"]
+					c["vol365"] = arr_to_percent(vol["price"])
+					
+					ama = mstat.all_amas(c["stock_price"], 10)
+					c["ama10"] = {}
+					c["ama10"]["price"] = arr_to_percent(ama["price"])
+					c["ama10"]["time"] = ama["time"]
+
+					ama = mstat.all_amas(c["stock_price"], 100)
+					c["ama100"] = {}
+					c["ama100"]["price"] = arr_to_percent(ama["price"])
+					c["ama100"]["time"] = ama["time"]
+
+					ama = mstat.all_amas(c["stock_price"], 365)
+					c["ama365"] = {}
+					c["ama365"]["price"] = arr_to_percent(ama["price"])
+					c["ama365"]["time"] = ama["time"]
+								
 					with open(competitor+c["cik"]+".json", "w+") as f:
 						f.write(json.dumps(c, indent=4))
 						f.close()
