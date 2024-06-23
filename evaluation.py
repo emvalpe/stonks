@@ -285,8 +285,6 @@ def while_less(data, times, target_time):
 	for i in range(len(times)):
 		if isinstance(i, int):
 			z = i
-		elif not i.isnumeric():
-			z = int(float(mstat.convert_time(times[i])))
 		else:
 			z = int(float(times[i]))
 
@@ -299,27 +297,18 @@ def while_less(data, times, target_time):
 		return np.nan	
 
 def dict_to_arr(data, competitor):
-	arr = {}
+	last_arr = ""
+	roc_arr = {}
 
-	for date in data["stock_price"]:
+	for date in data["stock_price"].keys():
 		data_at_utc = {}
-		line = date.split(",")
+		line = data["stock_price"][date]
 
-		dat = int(float(mstat.convert_time(line[0])))
+		dat = int(float(date))
 
-		first_iter = 0#low-high
-		for i in line:
-			if first_iter == 0:
-				first_iter+=1
-				continue
+		for i in line.keys():
+			data_at_utc[i] = float(line[i])
 
-			if first_iter != 5:
-				data_at_utc["price"+str(first_iter)] = float(i)
-			else:
-				data_at_utc["volume"] = float(i)
-
-			first_iter+=1
-		
 		if competitor == False:
 			#print(company["competitors"].keys())
 			for g in data["competitors"].keys():
@@ -327,15 +316,20 @@ def dict_to_arr(data, competitor):
 				#print(comper.keys())
 				if dat in list(comper.keys()):
 					#print(comper[int(dat)])
-					for ccat in comper[int(dat)].keys():
-						data_at_utc[ccat+"_"+g] = comper[int(dat)][ccat]
-				
+					citer = 0
+					for ccat in comper[int(dat)]:
+						if(ccat == 0.0):data_at_utc[g+"_"+str(citer)] = ccat
+						else:data_at_utc[g+"_"+str(citer)] = comper[int(dat)][ccat]
+
+						citer+=1
+
 			try:
 				for mfactor in data["macros"]["macro_factors"].keys():
 					if dat in data["macros"]["macro_factors"][mfactor]["time"]:
 						data_at_utc["macros_"+mfactor] = (float(data["macros"]["macro_factors"][mfactor]["value"][data["macros"]["macro_factors"][mfactor]["time"].index(dat)]))
 					else:
 						d = while_less(data["macros"]["macro_factors"][mfactor]["value"],data["macros"]["macro_factors"][mfactor]["time"],dat)
+						if isinstance(d, float):continue
 						if d.find("None") == -1:data_at_utc["macros_"+mfactor] = (float(d))
 						else:data_at_utc["macros_"+mfactor] =np.nan
 
@@ -413,23 +407,29 @@ def dict_to_arr(data, competitor):
 				#print(fdates)
 			'''
 		for vol in ["10", "100", "365"]:#low to high
-			if dat in data["vol"+vol]["time"]:
-				data_at_utc["vol"+vol] = data["vol"+vol]["price"][data["vol"+vol]["time"].index(dat)]
-			else:
-				data_at_utc["vol"+vol] = while_less(data["vol"+vol]["price"], data["vol"+vol]["time"], dat)
+			#print(data["vol"+vol]["time"])
+			#print(dat)
+			pdat = data["vol"+vol]
+			if isinstance(pdat, list):#weird error I thought I repaired
+				break
+
+			try:
+				data_at_utc["vol"+vol] = pdat["price"][pdat["time"].index(dat)]
+			except ValueError:
+				data_at_utc["vol"+vol] = while_less(pdat["price"], pdat["time"], dat)
+
 
 		for ama in ["10", "100", "365"]:#low to high
-			if dat in data["ama"+ama]["time"]:
-				data_at_utc["ama"+ama] = data["ama"+ama]["price"][data["ama"+ama]["time"].index(dat)]
-			else:
-				data_at_utc["ama"+ama] = while_less(data["ama"+vol]["price"], data["ama"+ama]["time"], dat)
+			pdat = data["ama"+ama]
+			try:
+				data_at_utc["ama"+ama] = pdat["price"][pdat["time"].index(dat)]
+			except ValueError:
+				data_at_utc["ama"+ama] = while_less(pdat["price"], pdat["time"], dat)
+		
+		roc_arr[int(dat)] = data_at_utc
 
+	return roc_arr
 
-		arr[int(dat)] = data_at_utc
-		'''if competitor == False:
-			print(len(data_at_utc.keys()))'''
-
-	return arr
 
 def model_graph_generator(model_history, company_name):
 	plt.clf()
@@ -438,7 +438,7 @@ def model_graph_generator(model_history, company_name):
 	plt.clf()#maybe try plt.close()
 	#less then 10^2, linear instead of log
 	plt.plot(range(len(model_history)),model_history)
-	plt.ylim([0,100])
+	plt.ylim([0,2])
 	plt.savefig("./figs/removed_outliers_"+company_name.replace(" ", "_").replace(".", "")+".png")
 
 def accuracy_graph(x, x2, company_name):
@@ -446,7 +446,7 @@ def accuracy_graph(x, x2, company_name):
 	plt.plot(x, label="expected")
 	plt.plot(x2, label="predicted")
 	plt.legend()
-	plt.savefig("./figs/accuracy_"+company_name.replace(" ", "_").replace(".", "")+".png")
+	plt.savefig("./figs/accuracy_"+company_name.replace(" ", "_").replace(".", "").replace(",", "")+".png")
 
 def main_wrapper(macro_economic_factors, comp):
 	model_history = []
@@ -480,31 +480,31 @@ def main_wrapper(macro_economic_factors, comp):
 	print("Loaded competitors")
 	company["macros"] = macro_economic_factors
 
-	data = dict_to_arr(company, False)
-	pdata = pd.DataFrame(data).T
-	pdata.to_csv("./input_data/test_"+company["name"]+".csv")
 
-	del data
-
-	inputdata = []#input data for each
+	pdata = pd.DataFrame(dict_to_arr(company, False)).T
 	outputdata = []
 
 	ite = 0#what is this?
-	length = len(pdata.index)-1
-	for i, r in pdata.iterrows():
-		if ite != 0:outputdata.append(r["price1"])
-		if length != ite:inputdata.append(r)
-
+	length = len(list(pdata.iterrows()))-1
+	print("length of input data: "+str(length))
+	for r in pdata.index:
+		if ite != 0:
+			outputdata.append(pdata.loc[r]["Open"])
+		
 		ite+=1
 	
-	print("length of input data: "+str(len(list((inputdata[0]).keys()))))
-	inputdata = pd.DataFrame(inputdata).dropna(axis=0, thresh=10).dropna(axis=1, how="any")
+	inputdata = pd.DataFrame(pdata).dropna(axis=1, how="any")[:-1]#[:-1] if error here
 	outputdata = pd.DataFrame(outputdata)
+	fff = open("./input_data/test_"+company["name"].replace(".", "").replace(",", "").replace(" ", "_")+".csv", "w+")
+	fff.write(str(inputdata))
+	inputdata.to_csv("./input_data/test_"+company["name"].replace(".", "").replace(",", "").replace(" ", "_")+".csv")
+	fff.close()
 
 	ishape = str(inputdata.shape)
 	cols = int(str(ishape.split(",")[1]).replace(")", "").replace(" ", ""))
+	print(ishape)
 	if cols == 0:
-		#print("skipping: "+company["name"])
+		print("skipping: "+company["name"])
 		return
 	print(ishape)
 	print(str(outputdata.shape))
@@ -526,7 +526,7 @@ def main_wrapper(macro_economic_factors, comp):
 	
 	model.compile(optimizer="adam", loss="mean_squared_error", metrics=["mean_squared_error"])
 	#what?????????????	
-	h = model.fit(x=inputdata, y=outputdata, validation_split=0.1, epochs=50, callbacks=callb)#, verbose=0)#maybe config batchsize
+	h = model.fit(x=inputdata, y=outputdata, validation_split=0.1, epochs=50, callbacks=callb, verbose=0)#maybe config batchsize
 	results.append(h.history["mean_squared_error"])
 	model_history.append(h.history["mean_squared_error"])#plotting model.history.history gives loss and mse 
 	accuracy_graph(outputdata, model.predict(inputdata), company["name"])
@@ -544,7 +544,7 @@ def main_wrapper(macro_economic_factors, comp):
 		results = []
 		for mod in models:
 			model.compile(optimizer="adam",loss="mean_squared_error", metrics=["mean_squared_error"])
-			h = model.fit(x=inputdata, y=outputdata, validation_split=0.1, epochs=50, callbacks=callb)#, verbose=0)
+			h = model.fit(x=inputdata, y=outputdata, validation_split=0.1, epochs=50, callbacks=callb, verbose=0)
 			model_history.append(h.history["mean_squared_error"])
 			results.append(h.history["mean_squared_error"])
 
@@ -629,6 +629,14 @@ for comp in all_nn_ready():
 	gc.collect()#<-every iteration
 	for i in gc.get_objects():
 		del i
+
+#[todo]remove non full rows? vs columns
+#[fix ] crashed due to memory again
+#[]consider removing outlier removal graph
+#[fix] google trends data
+#seems that the algo doesn't find competitor categories: line 330
+	#-reintroduce the statistical data, convert it to net change too
+#[test]convert from next days to change each day
 
 ##general info##
 #testing against the next day's open, the change in the next days open
