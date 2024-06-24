@@ -158,7 +158,7 @@ def arr_to_percent(arr):
 
 def company_info_loop():
 	control.macro_economic_factors()#only needs to be called once, where other macro indicators will go
-	ndl.ApiConfig.api_key = "D_ovDC58EdaUqmb_rzcG"
+	ndl.ApiConfig.api_key = ""
 	print("got macro economic factors")
 	#could easily put this in a different thread to run in the background
 
