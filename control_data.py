@@ -157,7 +157,12 @@ def crude_oil(execution_type):
 
 	for i in data_sources:
 		
-		data = requests.get(starting_url+i).json()
+		try:
+			data = requests.get(starting_url+i).json()
+		except requests.exceptions.JSONDecodeError:
+			print("failed at: " + i)
+			continue
+
 		if execution_type == "update":
 			wdir = open("./crude_oil/"+i.split("/")[1]+".txt", "a+")
 			day = data["dataset"]["data"][0]
