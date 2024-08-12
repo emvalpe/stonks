@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 
 import market_stats as mstat
 
+from memory_profiler import profile
+
 def just_alpha(text, spaces=False):
 	if type(text) == type(1):return text
 	new_str = ""
@@ -119,7 +121,7 @@ def all_nn_ready():
 	print("of these, have enough dates( > 1.5) "+str(second_pass))
 	print("Of these " + str(third_test)+ " have enough average categories ( > 10)")
 	#print(str(passed))
-
+	gc.collect()
 	return passed
 
 def remove_uncommon_categories(company):
@@ -156,7 +158,7 @@ def remove_uncommon_categories(company):
 					del i[j][key]
 
 	print("bad: "+str(pops)+" good: "+str(non))
-
+	gc.collect()
 	return company
 
 
@@ -244,21 +246,19 @@ def model_evolution(models, seeds, results, factors):#magic happens here
 		
 		ret1, ret2 = model_evolution([top_two[0]], seeds[:5], results_two[0], factors[0])
 		ret12, ret22 = model_evolution([top_two[1]], seeds[5:], results_two[1], factors[0])
+		gc.collect()
 		return ret1+ret12, ret2+ret22
 
+	gc.collect()
 	return new_mods, facts
 
 def gen_seed_func(all_factors):
-	awdsf = math.ceil(all_factors*(4/3))
 	'''
-	add hidden layer nodes/sub hidden layer nodes
+	add hidden layer nodes/sub hidden layer nodes#how would this actually effect the model
 	for layers add a bias
 	'''
 
-	possiblities = [awdsf, 1]
-
-
-	return possiblities
+	return [math.ceil(all_factors*(4/3)), 1]
 
 def gen_seed(possiblities_of_change, lengthb):
 	seeds = []
@@ -428,6 +428,7 @@ def dict_to_arr(data, competitor):
 		
 		roc_arr[int(dat)] = data_at_utc
 
+	gc.collect()
 	return roc_arr
 
 
@@ -437,9 +438,11 @@ def model_graph_generator(model_history, company_name):
 	plt.savefig("./figs/"+company_name.replace(" ", "_").replace(".", "")+".png")
 	plt.clf()#maybe try plt.close()
 	#less then 10^2, linear instead of log
+	'''
 	plt.plot(range(len(model_history)),model_history)
 	plt.ylim([0,2])
 	plt.savefig("./figs/removed_outliers_"+company_name.replace(" ", "_").replace(".", "")+".png")
+	'''
 
 def accuracy_graph(x, x2, company_name):
 	plt.clf()
@@ -448,6 +451,7 @@ def accuracy_graph(x, x2, company_name):
 	plt.legend()
 	plt.savefig("./figs/accuracy_"+company_name.replace(" ", "_").replace(".", "").replace(",", "")+".png")
 
+@profile
 def main_wrapper(macro_economic_factors, comp):
 	model_history = []
 
@@ -474,12 +478,11 @@ def main_wrapper(macro_economic_factors, comp):
 			del l
 			filefile.close()
 			num+=1
-
+			gc.collect()
 			#if num == 6:break
 
 	print("Loaded competitors")
 	company["macros"] = macro_economic_factors
-
 
 	pdata = pd.DataFrame(dict_to_arr(company, False)).T
 	outputdata = []
@@ -493,19 +496,25 @@ def main_wrapper(macro_economic_factors, comp):
 		
 		ite+=1
 	
-	inputdata = pd.DataFrame(pdata).dropna(axis=1, how="any")[:-1]#[:-1] if error here
+	inputdata = pd.DataFrame(pdata).dropna(axis=1, how="any")[:-1]
 	outputdata = pd.DataFrame(outputdata)
-	fff = open("./input_data/test_"+company["name"].replace(".", "").replace(",", "").replace(" ", "_")+".csv", "w+")
-	fff.write(str(inputdata))
-	inputdata.to_csv("./input_data/test_"+company["name"].replace(".", "").replace(",", "").replace(" ", "_")+".csv")
-	fff.close()
 
 	ishape = str(inputdata.shape)
 	cols = int(str(ishape.split(",")[1]).replace(")", "").replace(" ", ""))
-	print(ishape)
+	print(cols)
+
 	if cols == 0:
 		print("skipping: "+company["name"])
 		return
+	'''elif cols <= 20:#arbitrary
+		inputdata = pd.DataFrame(pdata).dropna(axis=0, how="any")[:-1]
+		#try 10% if that doesn't work too
+	else:
+		pass'''
+
+	inputdata.to_csv("./input_data/test_"+company["name"].replace(".", "").replace(",", "").replace(" ", "_")+".csv")
+	ishape = str(inputdata.shape)
+
 	print(ishape)
 	print(str(outputdata.shape))
 	
@@ -552,7 +561,7 @@ def main_wrapper(macro_economic_factors, comp):
 	model_graph_generator(model_history, company["name"])
 
 	del inputdata, outputdata, company, pdata, models, model, results, h, fs, seeds, ishape, model_history
-	#
+	gc.collect()
 
 try:
 	os.mkdir("./input_data")
@@ -626,13 +635,11 @@ for crypto in Path("./crypto/").iterdir():
 gc.enable()
 for comp in all_nn_ready():	
 	main_wrapper(macro_economic_factors, comp)
-	gc.collect()#<-every iteration
-	for i in gc.get_objects():
-		del i
+	gc.collect()
+
 
 #[todo]remove non full rows? vs columns
-#[fix ] crashed due to memory again
-#[]consider removing outlier removal graph
+#[fix] crashed due to memory again
 #[fix] google trends data
 #seems that the algo doesn't find competitor categories: line 330
 	#-reintroduce the statistical data, convert it to net change too
