@@ -51,14 +51,17 @@ def file_request(url, to=5, html=False):
 			file_str = requests.get(url, headers=headers, timeout=to)
 	except requests.ConnectionError:
 		t.sleep(1)
-		file_request(url)
+		file_request(url, html=html)
 	except RecursionError:
 		t.sleep(100)
 		print("Error getting filling max recursion")
-		file_request(url)
+		file_request(url, html=html)
+	except requests.exceptions.ChunkedEncodingError:#can't resolve hostname
+		t.sleep(600)
+		file_request(url, html=html)
 	except Exception:#supported to catch timeout errors idk why a specific except wont work
 		t.sleep(1)
-		file_request(url, to=30)
+		file_request(url, to=30, html=html)
 
 	return file_str
 
@@ -118,7 +121,11 @@ def date_to_num(date):
 		date = date.replace(" ", "").replace(",", "").replace("/", "").replace("\\", "")
 	
 	new_date = date[4:]+date[:4]
-	return new_date
+	try:
+		return int(new_date)
+
+	except ValueError:
+		return new_date
 
 
 #fix at some point
@@ -169,7 +176,6 @@ def no_col_table(lines):
 					except Exception:
 						continue
 					pin+=1
-
 
 	return dict_ret
 
@@ -285,9 +291,15 @@ def old_search_table(lines):
 			old = date_to_num(good_dates[0][4:]+good_dates[1][4:])
 			new = date_to_num(good_dates[0][:4]+good_dates[1][:4])
 			
-			if not old.isnumeric() or not new.isnumeric():
-				continue
-
+			try:
+				if not old.isnumeric():
+					continue
+			except AttributeError:
+				try:
+					if not new.isnumeric():
+						continue
+				except AttributeError:
+					pass
 
 			if old not in desired.keys():desired[old] = {}
 			if new not in desired.keys():desired[new] = {}
@@ -350,8 +362,12 @@ def sec_filling_information(company, target):
 
 	total = 0
 	start = t.time()
-	for f in company["filings"]["recent"]["form"]:
-		if f.upper() == target:total+=1
+	
+	try:
+		for f in company["filings"]["recent"]["form"]:
+			if f.upper() == target:total+=1
+	except KeyError:
+		return company
 	#SEC 600/min
 
 	for i in range(len(company["filings"]["recent"]["accessionNumber"])):
