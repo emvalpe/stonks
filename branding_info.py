@@ -9,7 +9,7 @@ import datetime
 
 import json
 import requests
-import os
+import os, gc
 from pathlib import Path
 
 import market_stats as mstat
@@ -17,6 +17,7 @@ import control_data as control
 import pandas
 
 import nasdaqdatalink as ndl
+import yfinance
 
 def search_for_company(name):#returns list of possible candidates
 	sec_data = open("processed.json", "r")
@@ -44,7 +45,6 @@ def search_for_company(name):#returns list of possible candidates
 			pp.remove(i)
 
 	return pp
-
 
 def top_brands():
 	f = open("branding_output.txt", "w+")
@@ -93,7 +93,12 @@ def company_pricing_info(company):
 	try:
 		company["stock_price"] = ndl.get("WIKI/"+company["tickers"][0].upper()).to_dict()
 	except ndl.errors.data_link_error.NotFoundError:#not on the nasdaq
-		#print("WIKI/"+company["tickers"][0].upper())
+		company["stock_price"] = yfinance.Ticker(company["tickers"][0].upper()).history("max")
+		return company
+	except ndl.errors.data_link_error.InternalServerError:
+		t.sleep(10)
+		return company_pricing_info(company)
+	except IndexError:
 		return {}
 
 	times = list(company["stock_price"]["Open"].keys())
@@ -156,70 +161,55 @@ def arr_to_percent(arr):
 
 	return new_arr
 
-def company_info_loop():
+def company_info_loop(resume=False):
 	control.macro_economic_factors()#only needs to be called once, where other macro indicators will go
-	ndl.ApiConfig.api_key = ""
+	ndl.ApiConfig.api_key = "D_ovDC58EdaUqmb_rzcG"
 	print("got macro economic factors")
 	#could easily put this in a different thread to run in the background
 
-	try:
-		os.mkdir("./stocks")
-	except FileExistsError:
-		for i in Path("./stocks/").iterdir():
-			i.open("w+")
-			#i.close()
-
-	try:
-		os.mkdir("./competitors")
-	except Exception:
-		for i in Path("./competitors/").iterdir():
-			i.open("w+")
-			#i.close()
+	if resume == False:
+		try:
+			os.mkdir("./stocks")
+		except FileExistsError:
+			for i in Path("./stocks/").iterdir():
+				if i.is_dir():
+					for ii in Path(i).iterdir():
+						ii.unlink()
+				else:
+					i.open("w+").close()
 
 	total = 0
-	replace_acronyms = {"Intel":"Intel Corp","Sony":"Sony Group Corp", "Jack Daniel's":"BROWN FORMAN CORP", "Coca-Cola":"Coca-Cola Consolidated, Inc.", "J.P. Morgan":"JPMorgan Chase & Co","McDonalds":"Yum Brands","GE":"General Electric CO", "IBM":"International Business Machines", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Yum Brands", "UPS":"United Parcel Service", "Pepsi":"PepsiCo", "Google":"Alphabet Inc.", "YouTube":"Alphabet Inc.", "Facebook":"Meta Platforms", "Instagram":"Meta Platforms", "Budweiser":"Anheuser-Busch Companies", "Pampers":"Procter & Gamble", "Nestle":"Nestlé S.A.", "Kellogg's":"WK Kellogg Co", "LinkedIn":"Microsoft", "Jack Daniel's":"Brown–Forman Corporation", "Tiffany":"Tiffany & Co", "Land Rover":"Jaguar Land Rover", "Louis Vuitton":"LVMH", "Goldman Sachs":"GOLDMAN SACHS GROUP INC", "Santander":"Banco Santander Mexico S.A.", "Mini":"British Motor Corporation", "Spotify":"Spotify Technology SA"}
-	competitors = {}
+
+	#used for brand test, shifting away from this
+	#replace_acronyms = {"Intel":"Intel Corp","Sony":"Sony Group Corp", "Jack Daniel's":"BROWN FORMAN CORP", "Coca-Cola":"Coca-Cola Consolidated, Inc.", "J.P. Morgan":"JPMorgan Chase & Co","McDonalds":"Yum Brands","GE":"General Electric CO", "IBM":"International Business Machines", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Yum Brands", "UPS":"United Parcel Service", "Pepsi":"PepsiCo", "Google":"Alphabet Inc.", "YouTube":"Alphabet Inc.", "Facebook":"Meta Platforms", "Instagram":"Meta Platforms", "Budweiser":"Anheuser-Busch Companies", "Pampers":"Procter & Gamble", "Nestle":"Nestlé S.A.", "Kellogg's":"WK Kellogg Co", "LinkedIn":"Microsoft", "Jack Daniel's":"Brown–Forman Corporation", "Tiffany":"Tiffany & Co", "Land Rover":"Jaguar Land Rover", "Louis Vuitton":"LVMH", "Goldman Sachs":"GOLDMAN SACHS GROUP INC", "Santander":"Banco Santander Mexico S.A.", "Mini":"British Motor Corporation", "Spotify":"Spotify Technology SA"}
 	anti_duplicate_list = []
 
-	for i in json.load(open("branding_output.txt", "r"))["companies"]:
-		if i["Company"].replace("\u00e9", "e") == "mini":continue
-		if i["Company"].replace("\u00e9", "e") not in replace_acronyms.keys():
-			company = i["Company"].replace("\u00e9", "e")
-		else:
-			company = replace_acronyms.get(i["Company"].replace("\u00e9", "e"))
+	bookmark = 0
+	try:
+		b = open("left_off_sec.txt", "r")
+		bookmark = b.read()
+		b.close()
+	except FileNotFoundError:
+		pass
 
-		if company in anti_duplicate_list:
-			continue
-		else:
-			anti_duplicate_list.append(company)#avoid alphebet and meta duplicates
+	write_to = open("left_off_sec.txt", "w+")
+	tt = 0
+	for btest in open("processed.json", "r").readlines():
 
-		print("Starting analysis of brand: " + company)
-		companies = search_for_company(company)
+		company = json.loads(btest)
 
-		if len(companies) > 1:
-			tickers = {"Salesforce, Inc.":"CRM","Apple Inc.":"AAPL", "HP INC":"HPQ", "GENERAL ELECTRIC CO":"GE", "FORD MOTOR CO":"F", "PROCTER & GAMBLE Co":"PG", "EBAY INC":"EBAY","MORGAN STANLEY":"MS"}
-			match = False
-			for comp in companies:
-				if comp["name"] in tickers.keys():
-					company = comp
-					match = True
-					break
-
-			if match == False:
-				company = companies[0]#idk default for now [fix]
-
-		elif companies == []:
-			print("Company may be foreign: " + company)
-			continue
-		else:
-			company = companies[0]
-
-		if type(company) == type(""):
-			print(companies)
-			continue
+		try:
+			os.mkdir("./stocks/"+company["sic"]+"/")
+		except FileExistsError as e:
+			pass
 
 		company["name"] = str(company["name"]).replace("/", "")
-		#add here
+		if resume == True and bookmark != company["name"]:
+			continue
+		else:
+			write_to.write(company["name"])
+		#print("Starting analysis of brand: " + company["name"])
+
 		sec_company = company_pricing_info(company)
 		if len(list(sec_company.keys())) == 0:
 			continue
@@ -228,14 +218,16 @@ def company_info_loop():
 			print("Multiple results for: " + company)
 
 		start = t.time()
-		print("Digging into " + sec_company["name"])
+		
 		#some how here too
 		sec_company = mstat.sec_filling_information(sec_company, "10-Q")
 		#sec_company["trendsData"] = mstat.trends_data(sec_company["name"])#needs testing too
-		if float(sec_company["fails"]) != 0 and len(sec_company["statisticalData"]) != 0 and float(sec_company["fails"])/float(len(sec_company["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
+		if sec_company["statisticalData"] == [] or float(sec_company["fails"])/float(len(sec_company["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
 			print("FAILED[] finding statistical data for: "+str(sec_company["name"]))
 			continue#skip dumping remaining info
 		
+		print("Digging into " + sec_company["name"])
+
 		vol = volatilities(sec_company, 10)
 		sec_company["vol10"] = {}
 		sec_company["vol10"]["time"] = vol["time"]
@@ -267,83 +259,23 @@ def company_info_loop():
 		sec_company["ama365"]["time"] = ama["time"]
 
 		#fill empty categories with previous values and remove extra dates
-		f = open("./stocks/"+(sec_company["tickers"][0]).lower()+".json", "w+")
+		f = open("./stocks/"+ sec_company["sic"] + "/" + (sec_company["tickers"][0]).lower()+".json", "w+")
 		try:
 			json.dump(sec_company, f, indent=4)
-		except Exception:
+		except Exception as e:
+			#print(str(e))
 			f.write(json.dumps(str(sec_company), indent=4))#use to find bad keys
 		f.close()
 		
-
 		print("Dug into " + sec_company["name"] + " took(min) " + str(round((t.time()-start)/60, 2)))
-		if sec_company["sic"] not in competitors.keys():#used to process competitors AFTER this
-			competitors[sec_company["sic"]] = [sec_company["cik"]]
-		else:
-			competitors[sec_company["sic"]].append(sec_company["cik"])
-	
-	print("Analyzing competitors:"+str(list(competitors.keys())))#test [not passed]
-	for j in competitors.keys():
-		print("Analyzing sic: "+str(j))
+		
+		gc.collect()
 
-		competitor = "./competitors/"+j+"-"
-		xcounter = 0
-		for x in mstat.sic_comparison(j):
-			if xcounter == 30:break#takes 4 days otherwise, 50 was too many, trying 10
-
-			jc = json.loads(x)
-			print("Starting: "+str(jc["name"]))
-			if jc["cik"] in competitors[j] or jc["entityType"] != "operating" or len(list(jc["tickers"])) == 0:continue
-			
-			c = company_pricing_info(jc)
-			#if c["exchanges"].find("NYSE") != -1:continue#uncomment to check
-			if len(list(c.keys())) == 0:
-				continue
-				
-			c = mstat.sec_filling_information(c, "10-Q")
-			if len(list(c["statisticalData"])) <= 10 or float(c["fails"])/float(len(c["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate, also seems to cause issues
-				print("FAILED[] finding ENOUGH statistical data for (or skipped because not enough data): "+str(c["name"]))
-				continue
-			else:
-				#c["trendsData"] = mstat.trends_data(c["name"])#needs testing too
-				try:
-					xcounter+=1
-					vol = volatilities(c, 10)
-					c["vol10"] = {}
-					c["vol10"]["time"] = vol["time"]
-					c["vol10"]["price"] = arr_to_percent(vol["price"])
-					
-					vol = volatilities(c, 100)
-					c["vol100"] = {}
-					c["vol100"]["time"] = vol["time"]
-					c["vol100"]["price"] = arr_to_percent(vol["price"])
-					
-					vol = volatilities(c, 365)
-					c["vol365"] = {}
-					c["vol365"]["time"] = vol["time"]
-					c["vol365"] = arr_to_percent(vol["price"])
-					
-					ama = mstat.all_amas(c["stock_price"], 10)
-					c["ama10"] = {}
-					c["ama10"]["price"] = arr_to_percent(ama["price"])
-					c["ama10"]["time"] = ama["time"]
-
-					ama = mstat.all_amas(c["stock_price"], 100)
-					c["ama100"] = {}
-					c["ama100"]["price"] = arr_to_percent(ama["price"])
-					c["ama100"]["time"] = ama["time"]
-
-					ama = mstat.all_amas(c["stock_price"], 365)
-					c["ama365"] = {}
-					c["ama365"]["price"] = arr_to_percent(ama["price"])
-					c["ama365"]["time"] = ama["time"]
-								
-					with open(competitor+c["cik"]+".json", "w+") as f:
-						f.write(json.dumps(c, indent=4))
-						f.close()
-						print("Wrote " + c["name"] + " successfully", flush=True)
-
-				except ValueError:
-					continue#didnt comment
+	write_to.close()
 
 company_info_loop()
 #google blocks trend data requests after two companies
+#yahoo finance for everything else
+# - scrape or use yfinance
+# - hist = msft.history(period="1mo")#try Max/max
+# - lso offers a lot of good stats that can be added to the network
