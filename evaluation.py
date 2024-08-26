@@ -1,12 +1,12 @@
 import json
 from pathlib import Path
-import math
 import random
 import os, gc
 
 import tensorflow.keras as keras
 import tensorflow as tf
 
+import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,17 +15,7 @@ import market_stats as mstat
 
 from memory_profiler import profile
 
-def just_alpha(text, spaces=False):
-	if type(text) == type(1):return text
-	new_str = ""
-	for i in range(len(text)):
-		if text[i].isalnum():
-			new_str += text[i]
-		elif spaces and text[i] == " ":
-			new_str += text[i]
-
-	return new_str
-
+#utils, will review later
 def check_month_difference(arr, dic, publish_date):
 	good_dates = {}
 	ret = False
@@ -57,227 +47,6 @@ def check_month_difference(arr, dic, publish_date):
 				'''
 
 	return good_dates
-
-def all_nn_ready():
-	total_p1 = 0
-	second_pass = 0
-	third_test = 0
-
-	passed = []
-
-	for j in Path("./stocks/").iterdir():
-		if str(j).find(".json") == -1:continue
-		try:
-			with open("./"+str(j),"r") as f:
-				company = json.load(f)
-				bad = 0
-				
-				for i in company["statisticalData"]:
-					if len(i.keys()) < 4:bad+=1
-
-				
-				if bad/len(company["statisticalData"]) > 0.3:
-					print("skipping: "+str(company["name"]))
-
-				else:
-					total_p1+=1
-					#print("exploring further: "+str(company["name"])+" testing total categories per date")
-
-					avg_len = 0
-					total = 0
-					ite = 0
-					temparr = []
-					
-					for i in reversed(company["statisticalData"]):#find just the two keys you need, start at the bottom to find first file add 3 months
-						
-						ite+=1
-						total += 1
-
-						mod_i = check_month_difference(i.keys(), i, just_alpha(i["filingDate"]))
-						avg_len += len(list(mod_i.keys()))	
-						temparr.append(mod_i)
-							
-					if avg_len/total >= 1.5:
-						company["statisticalData"] = temparr[::-1]
-						second_pass+=1
-						#print(str(company["name"])+" passed test 2 with: "+str(avg_len/total))
-
-						avg_cats = 0
-						div = 0
-
-						for stat in company["statisticalData"]:
-							for cat in stat.keys():
-								if cat not in ["method", "scale", "url", "filingDate"]:
-									avg_cats += len((stat[cat]).keys())
-									div+=1
-
-						if avg_cats/div > 10:
-							passed.append(company)
-							third_test+=1
-		except json.decoder.JSONDecodeError:
-			continue
-
-	print(str(total_p1)+"/100 original companies( > 70%)")
-	print("of these, have enough dates( > 1.5) "+str(second_pass))
-	print("Of these " + str(third_test)+ " have enough average categories ( > 10)")
-	#print(str(passed))
-	gc.collect()
-	return passed
-
-def remove_uncommon_categories(company):
-	category_math = {}
-
-	for i in company["statisticalData"]:
-		for j in i.keys():
-			if j in ["method", "scale", "url", "filingDate"]:
-				continue
-			for key in i[j].keys():
-				if key in category_math.keys():
-					category_math[key]+=1
-				else:
-					category_math[key] = 1
-	pops = 0
-	non = 0
-
-	for category in category_math.keys():
-		if category_math[category] < len(company["statisticalData"])/2:
-			category_math[category] = False
-			pops+=1
-		else:
-			category_math[category] = True
-			non+=1
-
-	for i in company["statisticalData"]:
-		for j in i.keys():
-			if j in ["method", "scale", "url", "filingDate"]:
-				continue
-
-			bist = list(i[j].keys())
-			for key in bist:
-				if category_math[key] == False:
-					del i[j][key]
-
-	print("bad: "+str(pops)+" good: "+str(non))
-	gc.collect()
-	return company
-
-
-def readlines(f):
-	lines = []
-
-	while True:
-		line = f.readline()
-		if line == "":break
-		if line == "\n":continue
-
-		lines.append(line)
-
-	return lines
-
-def model_evolution(models, seeds, results, factors):#magic happens here
-	new_mods = []
-	facts = []
-
-	facts.append(factors)
-	if len(models) == 0:
-
-		for seed in seeds:
-			biases = False
-			layer_len = factors		
-			mod = keras.Sequential()
-			mod.add(keras.layers.Dense(factors))
-			output_layer = keras.layers.Dense(1, activation="linear")
-
-			s = seed.split(",")
-			for cat in range(len(s)):
-				category = s[cat]
-				if cat == 2:
-					if int(category) == 2:
-						biases = True
-					else:
-						layer_len += int(s[cat])
-			facts.append(layer_len)
-			mod.add(keras.layers.Dense(layer_len*1.25,activation="sigmoid",use_bias=biases))
-			mod.add(output_layer)
-			new_mods.append(mod)
-
-	elif len(models) == 1:
-		
-		output_layer = keras.layers.Dense(1, activation="linear")
-		hidden_len = models[0].get_layer(index=1).units
-
-		for seed in seeds:
-			biases = False
-			mod = keras.Sequential()
-			mod.add(keras.layers.Dense(models[0].get_layer(index=0).units))
-
-			s = seed.split(",")
-			for cat in range(len(s)):
-				category = s[cat]
-				if cat == 1:
-					if int(category) == 1:
-						biases = True
-					else:
-						hidden_len += int(s[cat])
-			
-			facts.append(hidden_len)
-			mod.add(keras.layers.Dense(hidden_len,activation='sigmoid',use_bias=biases))
-			mod.add(output_layer)
-			new_mods.append(mod)
-
-	else:
-		top_two = []
-		results_two = []
-
-		for model in range(len(models)):
-
-			if len(top_two) < 2:
-				top_two.append(models[model])
-				results_two.append(results[model])
-			else:
-				if results_two[0] > results[model]:
-					top_two[0] = (models[model])
-					results_two[0] = (results[model])
-				elif results_two[1] > results[model]:
-					top_two[1] = (models[model])
-					results_two[1] = (results[model])
-				else:
-					pass
-		
-		ret1, ret2 = model_evolution([top_two[0]], seeds[:5], results_two[0], factors[0])
-		ret12, ret22 = model_evolution([top_two[1]], seeds[5:], results_two[1], factors[0])
-		gc.collect()
-		return ret1+ret12, ret2+ret22
-
-	gc.collect()
-	return new_mods, facts
-
-def gen_seed_func(all_factors):
-	'''
-	add hidden layer nodes/sub hidden layer nodes#how would this actually effect the model
-	for layers add a bias
-	'''
-
-	return [math.ceil(all_factors*(4/3)), 1]
-
-def gen_seed(possiblities_of_change, lengthb):
-	seeds = []
-	for seed in range(lengthb):
-		s = ""
-		ite = 0
-		for i in possiblities_of_change:
-			if ite == 0:
-				if random.randrange(0,i,1) > .5:
-					s+=str(1)
-				else:
-					s+=str(-1)
-			else:
-				s+=str(random.choice([0,1]))
-
-		seeds.append(s)
-
-	return seeds
-
 
 def while_less(data, times, target_time):
 	
@@ -431,6 +200,110 @@ def dict_to_arr(data, competitor):
 	gc.collect()
 	return roc_arr
 
+#model processing, modding, and dumping results
+def model_evolution(models, seeds, results, factors):#magic happens here
+	new_mods = []
+	facts = []
+
+	facts.append(factors)
+	if len(models) == 0:
+
+		for seed in seeds:
+			biases = False
+			layer_len = factors		
+			mod = keras.Sequential()
+			mod.add(keras.layers.Dense(factors))
+			output_layer = keras.layers.Dense(1, activation="linear")
+
+			s = seed.split(",")
+			for cat in range(len(s)):
+				category = s[cat]
+				if cat == 2:
+					if int(category) == 2:
+						biases = True
+					else:
+						layer_len += int(s[cat])
+			facts.append(layer_len)
+			mod.add(keras.layers.Dense(layer_len*1.25,activation="sigmoid",use_bias=biases))
+			mod.add(output_layer)
+			new_mods.append(mod)
+
+	elif len(models) == 1:
+		
+		output_layer = keras.layers.Dense(1, activation="linear")
+		hidden_len = models[0].get_layer(index=1).units
+
+		for seed in seeds:
+			biases = False
+			mod = keras.Sequential()
+			mod.add(keras.layers.Dense(models[0].get_layer(index=0).units))
+
+			s = seed.split(",")
+			for cat in range(len(s)):
+				category = s[cat]
+				if cat == 1:
+					if int(category) == 1:
+						biases = True
+					else:
+						hidden_len += int(s[cat])
+			
+			facts.append(hidden_len)
+			mod.add(keras.layers.Dense(hidden_len,activation='sigmoid',use_bias=biases))
+			mod.add(output_layer)
+			new_mods.append(mod)
+
+	else:
+		top_two = []
+		results_two = []
+
+		for model in range(len(models)):
+
+			if len(top_two) < 2:
+				top_two.append(models[model])
+				results_two.append(results[model])
+			else:
+				if results_two[0] > results[model]:
+					top_two[0] = (models[model])
+					results_two[0] = (results[model])
+				elif results_two[1] > results[model]:
+					top_two[1] = (models[model])
+					results_two[1] = (results[model])
+				else:
+					pass
+		
+		ret1, ret2 = model_evolution([top_two[0]], seeds[:5], results_two[0], factors[0])
+		ret12, ret22 = model_evolution([top_two[1]], seeds[5:], results_two[1], factors[0])
+		gc.collect()
+		return ret1+ret12, ret2+ret22
+
+	gc.collect()
+	return new_mods, facts
+
+def gen_seed_func(all_factors):
+	'''
+	add hidden layer nodes/sub hidden layer nodes#how would this actually effect the model
+	for layers add a bias
+	'''
+
+	return [math.ceil(all_factors*(4/3)), 1]
+
+def gen_seed(possiblities_of_change, lengthb):
+	seeds = []
+	for seed in range(lengthb):
+		s = ""
+		ite = 0
+		for i in possiblities_of_change:
+			if ite == 0:
+				if random.randrange(0,i,1) > .5:
+					s+=str(1)
+				else:
+					s+=str(-1)
+			else:
+				s+=str(random.choice([0,1]))
+
+		seeds.append(s)
+
+	return seeds
 
 def model_graph_generator(model_history, company_name):
 	plt.clf()
@@ -451,6 +324,110 @@ def accuracy_graph(x, x2, company_name):
 	plt.legend()
 	plt.savefig("./figs/accuracy_"+company_name.replace(" ", "_").replace(".", "").replace(",", "")+".png")
 
+#data processing/prep
+def remove_uncommon_categories(company):
+	category_math = {}
+
+	for i in company["statisticalData"]:
+		for j in i.keys():
+			if j in ["method", "scale", "url", "filingDate"]:
+				continue
+			for key in i[j].keys():
+				if key in category_math.keys():
+					category_math[key]+=1
+				else:
+					category_math[key] = 1
+	pops = 0
+	non = 0
+
+	for category in category_math.keys():
+		if category_math[category] < len(company["statisticalData"])/2:
+			category_math[category] = False
+			pops+=1
+		else:
+			category_math[category] = True
+			non+=1
+
+	for i in company["statisticalData"]:
+		for j in i.keys():
+			if j in ["method", "scale", "url", "filingDate"]:
+				continue
+
+			bist = list(i[j].keys())
+			for key in bist:
+				if category_math[key] == False:
+					del i[j][key]
+
+	print("bad: "+str(pops)+" good: "+str(non))
+	gc.collect()
+	return company
+
+def all_nn_ready():
+	total_p1 = 0
+	second_pass = 0
+	third_test = 0
+
+	passed = []
+
+	for j in Path("./stocks/").iterdir():
+		if str(j).find(".json") == -1:continue
+		try:
+			with open("./"+str(j),"r") as f:
+				company = json.load(f)
+				bad = 0
+				
+				for i in company["statisticalData"]:
+					if len(i.keys()) < 4:bad+=1
+
+				
+				if bad/len(company["statisticalData"]) > 0.3:
+					print("skipping: "+str(company["name"]))
+
+				else:
+					total_p1+=1
+					#print("exploring further: "+str(company["name"])+" testing total categories per date")
+
+					avg_len = 0
+					total = 0
+					ite = 0
+					temparr = []
+					
+					for i in reversed(company["statisticalData"]):#find just the two keys you need, start at the bottom to find first file add 3 months
+						
+						ite+=1
+						total += 1
+
+						mod_i = check_month_difference(i.keys(), i, mstat.just_alpha(i["filingDate"]))
+						avg_len += len(list(mod_i.keys()))	
+						temparr.append(mod_i)
+							
+					if avg_len/total >= 1.5:
+						company["statisticalData"] = temparr[::-1]
+						second_pass+=1
+						#print(str(company["name"])+" passed test 2 with: "+str(avg_len/total))
+
+						avg_cats = 0
+						div = 0
+
+						for stat in company["statisticalData"]:
+							for cat in stat.keys():
+								if cat not in ["method", "scale", "url", "filingDate"]:
+									avg_cats += len((stat[cat]).keys())
+									div+=1
+
+						if avg_cats/div > 10:
+							passed.append(company)
+							third_test+=1
+		except json.decoder.JSONDecodeError:
+			continue
+
+	print(str(total_p1)+"/100 original companies( > 70%)")
+	print("of these, have enough dates( > 1.5) "+str(second_pass))
+	print("Of these " + str(third_test)+ " have enough average categories ( > 10)")
+	#print(str(passed))
+	gc.collect()
+	return passed
+
 @profile
 def main_wrapper(macro_economic_factors, comp):
 	model_history = []
@@ -467,7 +444,7 @@ def main_wrapper(macro_economic_factors, comp):
 			filefile = open("./"+str(i), "r")
 			
 			l = ""
-			lines = readlines(filefile)
+			lines = filefile.readlines()
 			for t in lines:
 				l += t
 			l = json.loads(l)
@@ -530,7 +507,7 @@ def main_wrapper(macro_economic_factors, comp):
 	model.add(output_layer)
 	
 	callb = [
-		keras.callbacks.ModelCheckpoint("./models/"+just_alpha(company["name"])+("/{mean_squared_error:.2f}.keras"), monitor="mean_squared_error")#batch was removed for now
+		keras.callbacks.ModelCheckpoint("./models/"+mstat.just_alpha(company["name"])+("/{mean_squared_error:.2f}.keras"), monitor="mean_squared_error")#batch was removed for now
 	]
 	
 	model.compile(optimizer="adam", loss="mean_squared_error", metrics=["mean_squared_error"])
@@ -637,15 +614,5 @@ for comp in all_nn_ready():
 	main_wrapper(macro_economic_factors, comp)
 	gc.collect()
 
-
-#[todo]remove non full rows? vs columns
-#[fix] crashed due to memory again
-#[fix] google trends data
-#seems that the algo doesn't find competitor categories: line 330
-	#-reintroduce the statistical data, convert it to net change too
-#[test]convert from next days to change each day
-
-##general info##
-#testing against the next day's open, the change in the next days open
 #structure: inp-sigmoid-linear is the best thus far[test layer mutation, adding H layers]
 #-record on this structure: 7 mse
