@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import market_stats as mstat
+import yfinance as yf
+from threading import Thread
 
 def determine_lowest(bed):
 	index = len(bed)-1
@@ -25,8 +27,8 @@ def determine_lowest(bed):
 
 	return index
 
-#commodities prices
-def gold_valuation(execution_type):#using the nasdaq api
+#commodities prices and index funds
+def gold_valuation():#using the nasdaq api
 	starting_url = "http://data.nasdaq.com/api/v3/datasets/"
 	
 	try:
@@ -34,24 +36,13 @@ def gold_valuation(execution_type):#using the nasdaq api
 	except FileExistsError:
 		pass
 	
-	if execution_type == "update":
-		print("not programmed yet")
-		'''
-		f = open("gold_average.txt", "a+")
-		url = starting_url+"LBMA/GOLD"
-		to_process = json.loads(requests.get(url).text)
-		point = to_process["dataset"]["data"][0]
-		f.write(mstat.convert_time(point[0])+":"+str(point[1])+"\n")
-		f.close()'''
+	data = []
+	list_of_price_values = ["CHRIS/CME_GC1", "BUNDESBANK/BBK01_WT5511", "LBMA/GOLD", "WGC/GOLD_DAILY_USD"]
 
-	else:
-		data = []
-		list_of_price_values = ["CHRIS/CME_GC1", "BUNDESBANK/BBK01_WT5511", "LBMA/GOLD", "WGC/GOLD_DAILY_USD"]
-
-		for i in list_of_price_values:
-			f = open("./gold/gold_"+ i.replace("/", "") + ".txt", "w+")
+	for i in list_of_price_values:
+		with open("./gold/gold_"+ i.replace("/", "") + ".txt", "w+") as f: 
 			try:
-				info = mstat.file_request(starting_url+i)
+				info = mstat.file_request(starting_url+i, html=True)
 				to_process = json.loads(info)
 			except Exception:
 				print("failed at: "+i)
@@ -65,26 +56,19 @@ def gold_valuation(execution_type):#using the nasdaq api
 			data = []
 
 			f.close()
-
-def btc_valuation(execution_type):#binance api
+		
+def btc_valuation():#binance api
 
 	try:
 		os.mkdir("./crypto")
 	except FileExistsError:
 		pass
 
-	if execution_type == "update":
-		data = requests.get("https://api.binance.us/api/v3/ticker/price?symbol=BTCUSDT")
-		t = str(datetime.date.year) + "-" + str(datetime.date.month) + "-" + str(datetime.date.day)
-		f = open("./crypto/btc.txt", "a+")
-		f.write(t+":"+data.text)#2016-04-18 date format
-		f.close()
-	else:
-		f = open("./crypto/btc.txt", "w+")
-		end = json.loads(requests.get("https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=1").text)[0][0]
+	with open("./crypto/btc.txt", "w+") as f:
+		end = mstat.file_request("https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=1", html=True).json()[0][0]
 		info = []
 		while True:
-			data = json.loads(requests.get("https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=1000&endTime="+str(end)).text)
+			data = mstat.file_request("https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=1000&endTime="+str(end), html=True).json()
 			temp = []
 			if end == data[0][0]: break
 			else: end = data[0][0]
@@ -105,26 +89,19 @@ def btc_valuation(execution_type):#binance api
 
 		f.writelines(balls)
 		f.close()#earliest date 2021-03-01
-
-def eth_valuation(execution_type):
+		
+def eth_valuation():
 
 	try:
 		os.mkdir("./crypto")
 	except FileExistsError:
 		pass
 
-	if execution_type == "update":
-		data = requests.get("https://api.binance.us/api/v3/ticker/price?symbol=ETHUSDT")
-		t = str(datetime.date.year) + "-" + str(datetime.date.month) + "-" + str(datetime.date.day)
-		f = open("./crypto/eth.txt", "a+")
-		f.write(t+":"+data.text)#2016-04-18 date format
-		f.close()
-	else:
-		f = open("./crypto/eth.txt", "w+")
-		end = json.loads(requests.get("https://api.binance.us/api/v3/klines?symbol=ETHUSDT&interval=1d&limit=1").text)[0][0]
+	with open("./crypto/eth.txt", "r+") as f:
+		end = mstat.file_request("https://api.binance.us/api/v3/klines?symbol=ETHUSDT&interval=1d&limit=1", html=True).json()[0][0]
 		info = []
 		while True:
-			data = json.loads(requests.get("https://api.binance.us/api/v3/klines?symbol=ETHUSDT&interval=1d&limit=1000&endTime="+str(end)).text)
+			data = mstat.file_request("https://api.binance.us/api/v3/klines?symbol=ETHUSDT&interval=1d&limit=1000&endTime="+str(end), html=True).json()
 			temp = []
 			if end == data[0][0]: break
 			else: end = data[0][0]
@@ -136,6 +113,7 @@ def eth_valuation(execution_type):
 				date = funny[0]
 				funny = date+":"+funny[1]
 				temp.append(funny+"\n")#writing one chunk in order the the second is ><
+			
 			info.append(temp)	
 
 		balls = []
@@ -146,7 +124,7 @@ def eth_valuation(execution_type):
 		f.writelines(balls)
 		f.close()
 
-def crude_oil(execution_type):
+def crude_oil():
 	starting_url = "http://data.nasdaq.com/api/v3/datasets/"
 	data_sources = ['CHRIS/CME_CL1', 'CHRIS/ICE_B1']
 
@@ -157,28 +135,26 @@ def crude_oil(execution_type):
 
 	for i in data_sources:
 		
-		try:
-			data = requests.get(starting_url+i).json()
-		except requests.exceptions.JSONDecodeError:
-			print("failed at: " + i)
-			continue
-
-		if execution_type == "update":
-			wdir = open("./crude_oil/"+i.split("/")[1]+".txt", "a+")
-			day = data["dataset"]["data"][0]
-
-			wdir.write(day[0]+":"+str(day[1])+ str(day[7]) +"\n")
-			wdir.close()
-			del wdir
-
-		else:
-			wdir = open("./crude_oil/"+i.split("/")[1]+".txt", "w+")
-			#print("Source: "+i)
+		data = mstat.file_request(starting_url+i, html=True).json()
+		with open("./crude_oil/"+i.split("/")[1]+".txt", "r+") as f:
 			for j in data["dataset"]["data"]:
-				wdir.write(j[0]+":"+str(j[1])+ str(j[7]) +"\n")
-			
-			wdir.close()
+				f.write(j[0]+":"+str(j[1])+ str(j[7]) +"\n")
+			f.close()
 
+def index_funds():
+	inde = ["^IXIC", "^DJI", "^GSPC"]
+	
+	try:
+		os.mkdir("./index_funds")
+	except FileExistsError:
+		pass
+
+	for ind in inde:
+		with open("./index_funds/"+ind.replace("^", "")+".json", "w+") as f:
+			f.write(yf.Ticker(ind).history("max").to_json())
+			f.close()
+
+###personal analysis
 def generate_graph():
 	files = ["gold_average.txt", "./crypto/btc.txt", "./crypto/eth.txt"]
 	cfiles = ["cgold_average.txt", "./crypto/cbtc.txt", "./crypto/ceth.txt"]
@@ -255,71 +231,30 @@ def generate_graph():
 	plt.show()
 
 def update():#for daily usage
-	gold_valuation("update")
-	btc_valuation("update")
-	eth_valuation("update")
-	generate_graph()
+	print("gathering control data")
+	threads = []
 
-#generate_graph()#update()
+	threads.append(Thread(target=gold_valuation).run())
+	threads.append(Thread(target=btc_valuation).run())
+	threads.append(Thread(target=eth_valuation).run())
+	threads.append(Thread(target=crude_oil).run())
+	threads.append(Thread(target=index_funds).run())
 
-gold_valuation("")
-eth_valuation("")
-btc_valuation("")
-crude_oil("")
+	for t in threads:
+		try:
+			t.join()
+		except AttributeError:
+			pass
 
-def treasury_interest_rate():#use for federalinterest
+###country financial derivatives
+def treasury_interest_rate():
 	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"#hardcoded 500 total dps
 	request = (mstat.file_request(url, html=True)).json()
 	del request["meta"]
 	return request["data"]
 
-def yield_curve_dep_treasury():#remove commented code if data gathered correctly
-	url = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/"
-	add_1 = "?type=daily_treasury_yield_curve&field_tdr_date_value_month="
-	add_2 = "&page&_format=csv"
-	#the ints will be one variable decrementing by month
-	data = []
-	date = datetime.datetime.now()
-	
-	month = date.month
-	year = date.year
-
-	while year != 1900:
-		y2 = year
-		if int(month)-1 == 0:
-			m2 = month-1
-
-			if len(str(m2)) == 1:
-				m2 = "0"+str(m2)
-
-			y2-=1
-		else:m2 = str(12)
-
-		if len(str(month)) == 1:
-			month = "0"+str(month)
-
-		ite = 0
-		req = mstat.file_request(url+str(year)+month+add_1+str(y2)+m2+add_2, to=5,html=True)
-		#req = mstat.file_request(url+str(year)+str(month)+add_1+str(year)+str(month)+add_2)
-		print(str(req))
-		cats = []
-		for i in req.split("\n"):
-			if ite == 0:
-				cats=i.split(",")
-				ite+=1
-				continue
-			mod_i = {}
-			cat = 0
-			for comma in i.split(","):
-				if cat == 0:
-					mod_i["record_date"] = mstat.convert_time(comma.replace("/", "").replace("-",""))
-				else:
-					mod_i[cats[cat]] = comma
-				cat+=1
-
-			data.append(mod_i)
-
-	return data
+def yield_curve():
+	return yf.Ticker("^TYX").history("max")
 
 def labor_statistics_clump():
 
@@ -357,11 +292,24 @@ def macro_economic_factors():
 	data = {}
 	macro = open("macro_economic_factors.json", "w+")
 	
+	yield_data = json.loads(yield_curve().to_json())
 	print("gathering treasury interest rate data")
 	treasury_data = treasury_interest_rate()
 	for i in treasury_data:
-		data[int(float(mstat.convert_time(i["record_date"].replace("-",""))))] = {}
-		data[int(float(mstat.convert_time(i["record_date"].replace("-",""))))]["fed_interest_rate"] = i["avg_interest_rate_amt"]
+		try:
+			data[int(float(mstat.convert_time(i["record_date"])))]["fed_interest_rate"] = float(i["avg_interest_rate_amt"])
+		except KeyError:
+			data[int(float(mstat.convert_time(i["record_date"])))] = {}
+			data[int(float(mstat.convert_time(i["record_date"])))]["fed_interest_rate"] = float(i["avg_interest_rate_amt"])
+
+	for y in yield_data.keys():
+		for dat in (yield_data[y]).keys():
+			try:
+				data[int((dat.replace("00000", "00")))]["y_"+y] = float(yield_data[y][dat])
+			except KeyError:
+				data[int((dat.replace("00000", "00")))] = {}
+				data[int((dat.replace("00000", "00")))]["y_"+y] = float(yield_data[y][dat])
+
 
 	print("gathering labor stats")
 	labor = labor_statistics_clump()
@@ -374,27 +322,17 @@ def macro_economic_factors():
 			if len(ind) == 1:
 				ind = "0"+ind
 
-			if bell.find(m)!= -1:
+			if bell.find(m) != -1:
 				bell = bell.replace(m, ind)
 				break
 
-		bell = int(float(mstat.convert_time(bell.replace("-", ""))))
+		bell = int(float(mstat.convert_time(bell)))
 
-		if bell not in data.keys():
-			data[bell] = {}
-
-		data[bell] = labor[l]
-
-	'''#very slow and doesnt work for some reason
-	print("gathering yield curve data")
-	yield_curves = yield_curve_dep_treasury()
-	print(yield_curves)
-	for yieldc in yield_curves:
-		print(yieldc["record_date"])
-		if yieldc["record_date"] in data.keys():
-			data[yieldc["record_date"]].update(yieldc)
+		if bell in data.keys():
+			for k in labor[l]:
+				data[bell][k] = float(labor[l][k])
 		else:
-			data[yieldc["record_date"]] = yieldc
-	'''
+			data[bell] = labor[l]
+
 	macro.write(json.dumps(data, indent=4))
 	macro.close()
