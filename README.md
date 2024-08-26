@@ -6,7 +6,7 @@ Using NN to consider larger amounts of data for stock price prediction: below Da
 - Target company: value(open, close, high, low, volume, AMA, volatility, and stock split)
 - every other public company: value(like above)
 - industry averages(industries are determined by SIC)
-  - determined using every company in a defined SIC that is active averaged together
+    - determined using every company in a defined SIC that is active averaged together
 - index funds: value(same), used as an industrial factor too
 - macro economic factors: yield curve, CPI, PPI, unemployment rate, and treasury interest rate
 - control data("stable investments"): crypto, gold, oil, and index funds
@@ -29,20 +29,20 @@ Using NN to consider larger amounts of data for stock price prediction: below Da
 - control_data.py:
 
 - market_stats.py:
- - nyse api setup, would have to scrape website
- - google trends data, alternatives??
- - sec data causes 3 errors
+    - nyse api setup, would have to scrape website
+    - google trends data, alternatives??
+    - sec data causes 3 errors
 
 - evaluation.py:
- - [fix] crashed due to memory again
- - [test]convert from next days to change each day
- - [todo]remove non full rows? vs columns
- - [do last]reintroduce statistical data
- 	 - functions aren't fully reliable
- - add industry correlation data
- - add more macro factors data
- - add index funds
+    - [fix] crashed due to memory again
+    - [test]convert from next days to change each day
+    - [todo]remove non full rows? vs columns
+    - [do last]reintroduce statistical data
+        - functions aren't fully reliable
+    - add industry correlation data
+    - add more macro factors data
+    - add index funds
 
 - general:
- - make ai purchasing model DL NN
- - carbon majors, easy filter for company ethics
+    - make ai purchasing model DL NN, step post price prediction model
+    - carbon majors, easy filter for company ethics
