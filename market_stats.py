@@ -1,28 +1,23 @@
 import json
 import requests
-from bs4 import BeautifulSoup
-import bs4
+from bs4 import BeautifulSoup, builder
+import pandas as pd
 
+#outta trim this
+from colorama import Fore, Back, Style
 import math
 import os
 import sys
-
 import time as t
 import datetime
-
 import random as r
-import pandas as pd
-from io import StringIO
+from io import StringIO#probably doesn't need to exist
 
 from pytrends.request import TrendReq
 
+#vital data aquisition and processing
 def convert_time(date):
-	tim = 0
-	date = date.replace("-", "")
-	date = date+"000000"
-	tim = str((datetime.datetime.strptime(date, "%Y%m%d%H%M%S") - datetime.datetime.utcfromtimestamp(0)).total_seconds())
-
-	return tim
+	return str((datetime.datetime.strptime(date, "%Y-%m-%d") - datetime.datetime.utcfromtimestamp(0)).total_seconds())
 
 def random_user_agent(typ="str"):#requests lib is very picky while selenium isn't 
     agents = open("agents.txt", "r")
@@ -65,6 +60,8 @@ def file_request(url, to=5, html=False):
 
 	return file_str
 
+###some utilities
+#convert month to num
 def rep_month(string):
 	months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
 	string = string.replace(u'\xa0', ' ').replace(",", "").replace("/", " ").replace("\\", " ")
@@ -99,12 +96,12 @@ def rep_month(string):
 		outp+=sub+" "
 
 	return outp[:-1]
-
+#start of alpha numeric in string, typically to remove many tabs and spaces
 def start_alp(text):
 	for i in range(len(text)):
 		if text[i].isalnum():
 			return text[i:]
-
+#removes weird symbols, unicode?, and other
 def just_alpha(text, spaces=False):
 	if type(text) == type(1):return text
 	new_str = ""
@@ -115,10 +112,10 @@ def just_alpha(text, spaces=False):
 			new_str += text[i]
 
 	return new_str
-
+#prep for convert_time function
 def date_to_num(date):
 	if len(date) > 8:#year/month/day
-		date = date.replace(" ", "").replace(",", "").replace("/", "").replace("\\", "")
+		date = date.replace(" ", "").replace(",", "").replace("/", "").replace("\\", "").replace("-", "")
 	
 	new_date = date[4:]+date[:4]
 	try:
@@ -128,7 +125,7 @@ def date_to_num(date):
 		return new_date
 
 
-#fix at some point
+#fix at some point, revisit all
 def no_col_table(lines):
 	dict_ret = {}
 	for t in lines.find_all("table"):
@@ -321,7 +318,7 @@ def old_search_table(lines):
 		
 	return desired	
 
-def find_scaling_per_doc(lines):
+def find_scaling_per_doc(lines):#exists because some companies don't list the exact number just 1000*100 for instance
 	for p in lines.find_all("p"):
 		tp = str(p.text).lower()
 		if tp.find("(in") != -1 and len(tp[tp.find("(in"):tp.find("\n")-1]) < 50 and len(tp[tp.find("(in"):tp.find("\n")-1]) > 5:
@@ -337,7 +334,7 @@ def find_scaling_per_doc(lines):
 
 	return ""
 	
-
+#SEC based search and competitor analysis
 def sic_comparison(company):
 	#company should be sic
 	competitors = []
@@ -397,12 +394,12 @@ def sec_filling_information(company, target):
 						pass
 
 
-			except bs4.builder.ParserRejectedMarkup as e:
-				print(str(e))
+			except builder.ParserRejectedMarkup as e:
+				print(Fore.RED + str(e))
 				company["fails"] +=1
 					
 			except AssertionError as g:
-				print(str(g))
+				print(Fore.RED + str(g))
 				company["fails"] +=1
 		
 			if doc != "":
@@ -429,10 +426,6 @@ def sec_filling_information(company, target):
 						print("recent mod above")'''
 
 			else:
-				print("failed: "+(filing_url))
-				f = open("failure.txt", "w+")
-				f.write(result)
-				f.close()
 				extra_stats["method"] = 0
 					
 			#print(extra_stats["method"])
@@ -455,7 +448,7 @@ def sec_filling_information(company, target):
 
 	return company
 
-
+###derivatives functions
 def volatility(prices):
 	days = len(prices)
 	s_period = math.sqrt(days)
@@ -471,11 +464,27 @@ def volatility(prices):
 
 	return s_period*std
 
-def trends_data(company_str, execution_type=""):
-	py = TrendReq(hl="en-US", tz=360, retries=2)
-	payload = py.build_payload(kw_list=[company_str], cat=0, geo="US", timeframe="all", gprop="")
+def all_volatilities(company, vol):
+	vols = {}
+	vols["time"] = []
+	vols["price"] = []
 
-	return py.interest_over_time().to_json()
+	to_pass = []
+	time_offset = 0
+
+	for value in list(company["stock_price"].keys()):
+		to_pass.append(company["stock_price"][value]["Open"])
+		vols["time"].append(value)
+
+		if len(to_pass) > vol:
+			to_pass.pop()
+			vols["price"].append(volatility(to_pass))
+		elif len(to_pass) == vol:
+			vols["price"].append(volatility(to_pass))
+		else:
+			vols["price"].append(1)
+	
+	return vols
 
 def ama(prices):
 	if(len(prices) == 0):
@@ -493,12 +502,10 @@ def all_amas(data, length):
 	amas = {}
 	amas["time"] = []
 	amas["price"] = []
-	ama_iter = 0
-	offset = 0
 
-	for i in list(data.keys()):
+	for i in list(data["stock_price"].keys()):
 		try:
-			to_pass.append(data[offset]["Open"])
+			to_pass.append(data[i]["Open"])
 		except Exception:
 			pass#ignore for failed search of 0
 		if len(to_pass) > length:
@@ -507,7 +514,12 @@ def all_amas(data, length):
 		amas["time"].append(i)
 		amas["price"].append(ama(to_pass))
 		
-		offset = i
-		ama_iter+=1
-
 	return amas
+
+
+###removed, not working sentiment analysis
+def trends_data(company_str, execution_type=""):
+	py = TrendReq(hl="en-US", tz=360, retries=2)
+	payload = py.build_payload(kw_list=[company_str], cat=0, geo="US", timeframe="all", gprop="")
+
+	return py.interest_over_time().to_json()
