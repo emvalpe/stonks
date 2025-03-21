@@ -378,29 +378,20 @@ def sec_filling_information(company, target):
 
 			doc = ""
 
-			result = (file_request(filing_url))#.replace("\u2019", "'").lower().replace("\t", " ")
-			try:
-				for file in BeautifulSoup(result[result.find('</SEC-HEADER>')+len('</SEC-HEADER>'):],'html.parser'):
-					sfile = str(file).lower()
-					desc = sfile[sfile.find('<DESCRIPTION>'.lower()):]
-					desc = desc[:desc.find("\n")]
-					if just_alpha(desc).lower().find(just_alpha(target).lower()) != -1:
-						doc = sfile
-						break
-					elif sfile.find("<text>") != -1:
-						doc = sfile[sfile.find("<text>"):sfile.find("</text>")]
-						break
-					else:
-						pass
-
-
-			except builder.ParserRejectedMarkup as e:
-				print(Fore.RED + str(e))
-				company["fails"] +=1
-					
-			except AssertionError as g:
-				print(Fore.RED + str(g))
-				company["fails"] +=1
+			result = (file_request(filing_url)).replace("\u2019", "'").lower()
+				
+			for file in BeautifulSoup(result[result.find('<document>'):result.find('</document>')],'html.parser'):
+				sfile = str(file).lower()
+				desc = sfile[sfile.find('<DESCRIPTION>'.lower()):]
+				desc = desc[:desc.find("\n")]
+				if just_alpha(desc).lower().find(just_alpha(target).lower()) != -1:
+					doc = sfile
+					break
+				elif sfile.find("<text>") != -1:
+					doc = sfile[sfile.find("<text>"):sfile.find("</text>")]
+					break
+				else:
+					pass
 		
 			if doc != "":
 				if (doc.lower()).find("<s>") == -1 and (doc.lower()).find("<s>") == -1:
@@ -482,13 +473,13 @@ def all_volatilities(company, vol):
 		elif len(to_pass) == vol:
 			vols["price"].append(volatility(to_pass))
 		else:
-			vols["price"].append(1)
+			vols["price"].append(0)
 	
 	return vols
 
 def ama(prices):
 	if(len(prices) == 0):
-		return 1
+		return 0
 
 	average = 0
 	for p in prices:
@@ -512,7 +503,10 @@ def all_amas(data, length):
 			to_pass.pop()
 		
 		amas["time"].append(i)
-		amas["price"].append(ama(to_pass))
+		if to_pass != length:
+			amas["price"].append(0)
+		else:
+			amas["price"].append(ama(to_pass))
 		
 	return amas
 
