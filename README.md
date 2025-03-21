@@ -25,24 +25,33 @@ Using NN to consider larger amounts of data for stock price prediction: below Da
 - read from tree and use to train a model to accurately predict price
 - display results in graphs to determine accuracy
 
+
 #Improvements
 - control_data.py:
+ - all commodities data
+  - profile/classify into type
 
 - market_stats.py:
-    - nyse api setup, would have to scrape website
-    - google trends data, alternatives??
-    - sec data causes 3 errors
+ - nyse api setup, would have to scrape website
+ - google trends data, alternatives??
+ - sec data causes 1 errors [verify]
 
 - evaluation.py:
-    - [fix] crashed due to memory again
-    - [test]convert from next days to change each day
-    - [todo]remove non full rows? vs columns
-    - [do last]reintroduce statistical data
-        - functions aren't fully reliable
-    - add industry correlation data
-    - add more macro factors data
-    - add index funds
+ - data should be presplit into test, validation, and eval
+ - [fix] crashed due to memory again
+ - [test]convert from next days to change each day
+ - [todo]remove non full rows? vs columns
+ - [do last]reintroduce statistical data
+ 	 - functions aren't fully reliable 
+ - reintroduce competitors
+ - industry averages arent added for some reason
+ - classify similiar companies/companies associated with one another, nearest neighbor??
+ - classify economy strength??
+ - add index funds
+ - add greater genetic algo batch size for hyperparmeter tuning(should use validation data instead??)
+ - split data into valid, test, and training
 
 - general:
-    - make ai purchasing model DL NN, step post price prediction model
-    - carbon majors, easy filter for company ethics
+ - make ai purchasing model DL NN
+ - carbon majors, easy filter for company ethics
+ - sentiment analysis
