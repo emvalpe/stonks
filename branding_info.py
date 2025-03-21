@@ -21,6 +21,8 @@ import control_data as control
 import nasdaqdatalink as ndl
 import yfinance
 
+import warnings 
+warnings.filterwarnings("ignore")
 
 ###retired likely to be removed soon
 def search_for_company(name):#returns list of possible candidates
@@ -103,30 +105,33 @@ def company_pricing_info(company):
 		data = {}
 		previous_data = {}
 		#print(1)
-		for t in times:
-			data[int(t.timestamp())] = {}
+		for tt in times:
+			data[int(tt.timestamp())] = {}
 			for k in company["stock_price"].keys():
 				try:
-					if previous_data[k]:
-						data[int(t.timestamp())][k] = float((company["stock_price"][k][t]-previous_data[k])/previous_data[k])
+					if k in previous_data.keys():
+						data[int(tt.timestamp())][k] = float((company["stock_price"][k][tt]))#-previous_data[k])) makes the values a change instead of raw
 					else:
-						data[int(t.timestamp())][k] = float(0)
+						data[int(tt.timestamp())][k] = float(company["stock_price"][k][tt])
 				except KeyError:
-					data[int(t.timestamp())][k] = float(0)
+					data[int(tt.timestamp())][k] = float(0)
 				
-				previous_data[k] = company["stock_price"][k][t]
+				previous_data[k] = company["stock_price"][k][tt]
 
 		company["stock_price"] = data
 		return company 
-	
-	except ndl.errors.data_link_error.NotFoundError:#not on the nasdaq
+	except (ndl.errors.data_link_error.NotFoundError, ndl.errors.data_link_error.ForbiddenError, ValueError, ndl.errors.data_link_error.DataLinkError) as e:#not on the nasdaq
 		#print(2)
 		#gives up to 1m updates(up to a week), 730 days for 60m
 		yf = yfinance.Ticker(company["tickers"][0].upper()).history("max")
+
 		for col in yf.columns:
-			#company["stock_price"][int(col)] = 
-			yf[col] = arr_to_percent((yf[col]).tolist())
-		
+			try:
+				yf[col] = ((yf[col]).tolist())
+			except ValueError:
+				#print("this one")
+				pass
+
 		prev = {}
 		company["stock_price"] = {}
 		for ind in yf.index:
@@ -136,7 +141,7 @@ def company_pricing_info(company):
 				
 				try:
 					if prev[col]:
-						company["stock_price"][int(idn)][col] = float((yf[col][ind]-prev[col])/prev[col])
+						company["stock_price"][int(idn)][col] = float((float(yf[col][ind])-float(prev[col])))
 					else:
 						company["stock_price"][int(idn)][col] = float(0)
 				except KeyError:
@@ -152,25 +157,32 @@ def company_pricing_info(company):
 	except IndexError:
 		return company
 
-def arr_to_percent(arr):
+def arr_to_percent(arr):#dont use, implementing is backtracking
 	t = 1
 	new_arr = []
 	ite = 0
+
 	for i in arr:
 		if not ite:
 			new_arr.append(float(0))
 		elif not t:
 			new_arr.append(float(0))
 		else:
-			new_arr.append(float((i-t)/t))
-				
+			try:
+				new_arr.append(float((i-t)/t))
+			except TypeError:
+				new_arr.append(float(1))
+				t=0
+				ite+=1
+				continue
+			
 		t = i
 		ite+=1
 
-	return new_arr
+		return new_arr
 
-def company_info_loop(resume=True):
-	ndl.ApiConfig.api_key = ""
+def company_info_loop(resume=False):
+	ndl.ApiConfig.api_key = ""#fill urself
 	
 	if resume == False:
 		#could easily put this in a different thread to run in the background
@@ -191,7 +203,6 @@ def company_info_loop(resume=True):
 
 	#used for brand test, shifting away from this, I theorize that using a larger ecosystem of companies will help
 	#replace_acronyms = {"Intel":"Intel Corp","Sony":"Sony Group Corp", "Jack Daniel's":"BROWN FORMAN CORP", "Coca-Cola":"Coca-Cola Consolidated, Inc.", "J.P. Morgan":"JPMorgan Chase & Co","McDonalds":"Yum Brands","GE":"General Electric CO", "IBM":"International Business Machines", "HSBC":"Hong Kong and Shanghai Banking", "KFC":"Yum Brands", "UPS":"United Parcel Service", "Pepsi":"PepsiCo", "Google":"Alphabet Inc.", "YouTube":"Alphabet Inc.", "Facebook":"Meta Platforms", "Instagram":"Meta Platforms", "Budweiser":"Anheuser-Busch Companies", "Pampers":"Procter & Gamble", "Nestle":"Nestlé S.A.", "Kellogg's":"WK Kellogg Co", "LinkedIn":"Microsoft", "Jack Daniel's":"Brown–Forman Corporation", "Tiffany":"Tiffany & Co", "Land Rover":"Jaguar Land Rover", "Louis Vuitton":"LVMH", "Goldman Sachs":"GOLDMAN SACHS GROUP INC", "Santander":"Banco Santander Mexico S.A.", "Mini":"British Motor Corporation", "Spotify":"Spotify Technology SA"}
-	anti_duplicate_list = []
 
 	bookmark = 0
 	try:
@@ -204,6 +215,8 @@ def company_info_loop(resume=True):
 	tt = 0
 	prevtt = 0
 	vist = open("processed.json", "r").readlines()
+
+	last_update_time = t.time()
 
 	for btest in vist:
 
@@ -231,52 +244,48 @@ def company_info_loop(resume=True):
 
 		start = t.time()#for ending func
 		
+		'''#removing for testing sake, slows exec significantly 1-8 minutes per company to 10-30 sec
 		sec_company = mstat.sec_filling_information(sec_company, "10-Q")
 		#sec_company["trendsData"] = mstat.trends_data(sec_company["name"])#needs testing too
-		if sec_company["statisticalData"] == [] or float(sec_company["fails"])/float(len(sec_company["statisticalData"]))*100 >= 20.0:#dont use if less then 20% accurate
+		if sec_company["statisticalData"] == [] or (sec_company["fails"])/len(sec_company["statisticalData"]) >= .8:#dont use if less then 80% success
 			print(Fore.RED + "FAILED[] finding statistical data for: "+str(sec_company["name"]))
 			tt+=1
 			continue#skip dumping remaining info
-		
+		'''
+
 		prog = (float(tt)/float(len(vist)))*100
-		if prog > prevtt+1 and not resume:
-			print(Fore.GREEN + "Progress: "+str(prog) + "% or " + str(tt) + "/" + str(len(vist)))
+		if (prog > prevtt+1 and not resume) or (not prevtt and resume):
+			print(Fore.GREEN + "Progress: "+str(round(prog, 2)) + "% or " + str(tt) + "/" + str(len(vist)) + " in(min): " + str(round((t.time()-last_update_time)/60, 2)))
+			last_update_time = t.time()
 			prevtt = prog
-
-		if not prevtt and resume:
-			print(Fore.GREEN + "Progress: "+str(prog) + "% or " + str(tt) + "/" + str(len(vist)))
-			prevtt = prog
-			#first execution after resume
-
-		#print("Digging into " + sec_company["name"])
 
 		vol = mstat.all_volatilities(sec_company, 10)
-		vol["prices"] = arr_to_percent(vol["price"])
+		vol["prices"] = (vol["price"])
 		for v in vol["time"]:
 			sec_company["stock_price"][v]["vol10"] = vol["price"][vol["time"].index(v)]
 		
 		vol = mstat.all_volatilities(sec_company, 100)
-		vol["prices"] = arr_to_percent(vol["price"])
+		vol["prices"] = (vol["price"])
 		for v in vol["time"]:
 			sec_company["stock_price"][v]["vol100"] = vol["price"][vol["time"].index(v)]
 		
 		vol = mstat.all_volatilities(sec_company, 365)
-		vol["prices"] = arr_to_percent(vol["price"])
+		vol["prices"] = (vol["price"])
 		for v in vol["time"]:
 			sec_company["stock_price"][v]["vol365"] = vol["price"][vol["time"].index(v)]
 		
 		ama = mstat.all_amas(sec_company, 10)
-		ama["prices"] = arr_to_percent(ama["price"])
+		ama["prices"] = (ama["price"])
 		for a in ama["time"]:
 			sec_company["stock_price"][a]["ama10"] = ama["price"][ama["time"].index(a)]
 
 		ama = mstat.all_amas(sec_company, 100)
-		ama["prices"] = arr_to_percent(ama["price"])
+		ama["prices"] = (ama["price"])
 		for a in ama["time"]:
 			sec_company["stock_price"][a]["ama100"] = ama["price"][ama["time"].index(a)]
 
 		ama = mstat.all_amas(sec_company, 365)
-		ama["prices"] = arr_to_percent(ama["price"])
+		ama["prices"] = (ama["price"])
 		for a in ama["time"]:
 			sec_company["stock_price"][a]["ama365"] = ama["price"][ama["time"].index(a)]
 
@@ -292,7 +301,7 @@ def company_info_loop(resume=True):
 			write_to.write(company["name"])
 			write_to.close()
 		
-		print(Fore.BLUE + "Dug into " + sec_company["name"] + " took(min) " + str(round((t.time()-start)/60, 2)))
+		print(Fore.BLUE + "Dug into " + sec_company["name"] + " took(min) " + str(round((t.time()-start)/60, 2)) + " (sec) "+str(round((t.time()-start), 2)))
 		
 		bookmark = company["name"]
 		if resume:resume=False
@@ -304,28 +313,42 @@ def company_info_loop(resume=True):
 		if i.is_dir():
 			sic = str(i)
 			sic_data = {}
-			for j in Path("./stocks/"+sic):
+			for j in Path("./"+sic+"/").iterdir():
 				if str(j).find("json") != -1:
-					j.open()
-					cdata = json.load(j)
+					cdata = json.loads(open(str(j), "r").read())
 					for stockp in cdata["stock_price"].keys():
 						if stockp not in sic_data.keys():
 							sic_data[stockp] = cdata["stock_price"][stockp]
-							for key in sic_data[stockp].keys():
+							for key in list(sic_data[stockp].keys()):
 								sic_data[stockp][key+"--count"] = 1
 						else:
 							for key in cdata["stock_price"][stockp]:
-								sic_data[stock_p][key] += cdata["stock_price"][stockp][key]
-								sic_data[stock_p][key+"--count"] += 1
-	
-			for time_ind in sic_data.keys():
-				for cat in sic_data[time_ind].keys():
-					sic_data[time_ind][cat] = sic_data[time_ind][cat]/sic_data[time_ind][cat+"--count"]
-					del sic_data[time_ind][cat+"--count"]
+								try:
+									sic_data[stockp][key] += cdata["stock_price"][stockp][key]
+								except KeyError:
+									sic_data[stockp][key] = cdata["stock_price"][stockp][key]
+								try:
+									sic_data[stockp][key+"--count"] += 1
+								except KeyError:
+									sic_data[stockp][key+"--count"] = 1
 
-			with open("./stock/"+sic+".json") as g:
-				json.dump(g, sic_data, indent=4)
-				g.close()
+			for time_ind in sic_data.keys():
+				for cat in list(sic_data[time_ind].keys()):
+					if cat.find("--") != -1:continue
+					sic_data[time_ind][cat] = sic_data[time_ind][cat]/sic_data[time_ind][cat+"--count"]#add tag to final usable??
+					#del sic_data[time_ind][cat+"--count"]
+
+			with open(sic+".json", "w+") as g:
+				if len(sic_data) == 0:
+					g.close()
+					Path(sic+".json").unlink()
+					try:
+						Path(sic+"/").rmdir()
+					except OSError:
+						pass
+				else:
+					g.write(json.dumps(sic_data, indent=4))
+					g.close()
 
 	try:
 		t1.join()
