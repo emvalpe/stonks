@@ -12,6 +12,7 @@ import numpy as np
 import market_stats as mstat
 import yfinance as yf
 from threading import Thread
+from colorama import Fore
 
 def determine_lowest(bed):
 	index = len(bed)-1
@@ -45,7 +46,7 @@ def gold_valuation():#using the nasdaq api
 				info = mstat.file_request(starting_url+i, html=True)
 				to_process = json.loads(info)
 			except Exception:
-				print("failed at: "+i)
+				print(Fore.RED + "failed at: "+i)
 				continue
 
 			for val in to_process["dataset"]["data"]:
@@ -135,7 +136,13 @@ def crude_oil():
 
 	for i in data_sources:
 		
-		data = mstat.file_request(starting_url+i, html=True).json()
+		data = mstat.file_request(starting_url+i, html=False)
+		if str(data).find("Request unsuccessful") == -1:
+			data = json.loads(data)
+		else:
+			print("failed at: "+i)
+			continue
+
 		with open("./crude_oil/"+i.split("/")[1]+".txt", "r+") as f:
 			for j in data["dataset"]["data"]:
 				f.write(j[0]+":"+str(j[1])+ str(j[7]) +"\n")
@@ -231,6 +238,8 @@ def generate_graph():
 	plt.show()
 
 def update():#for daily usage
+	'''for i in ["crypto","crude_oil", "gold", "index_funds"]:
+		os.rmdir(i)'''
 	print("gathering control data")
 	threads = []
 
@@ -240,16 +249,18 @@ def update():#for daily usage
 	threads.append(Thread(target=crude_oil).run())
 	threads.append(Thread(target=index_funds).run())
 
+	t = threads[0]
 	for t in threads:
 		try:
 			t.join()
 		except AttributeError:
 			pass
 
+
 ###country financial derivatives
 def treasury_interest_rate():
 	url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=record_date:gte:1900-01-01,security_desc:in:Federal Financing Bank&page[size]=500"#hardcoded 500 total dps
-	request = (mstat.file_request(url, html=True)).json()
+	request = json.loads(mstat.file_request(url, html=False))
 	del request["meta"]
 	return request["data"]
 
